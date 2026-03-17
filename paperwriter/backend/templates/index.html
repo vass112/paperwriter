@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PaperWriter</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/latex.js/dist/latex.min.js"></script>
+    <style>
+        .ProseMirror {
+            outline: none;
+        }
+
+        .ProseMirror p.is-empty::before {
+            color: #adb5bd;
+            content: attr(data-placeholder);
+            float: left;
+            height: 0;
+            pointer-events: none;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="app">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="logo">PaperWriter</div>
+            <nav id="section-nav">
+                <!-- Sections populated by JS -->
+            </nav>
+            <div class="export-controls">
+                <button id="authors-btn" style="background: #34c759; margin-bottom: 10px;">Manage Authors</button>
+                <button id="images-btn" style="background: #ff9500; margin-bottom: 10px;">🖼 Manage Images</button>
+                <button id="export-btn">Export PDF</button>
+            </div>
+        </aside>
+
+        <!-- Main Editor -->
+        <main class="editor-container">
+            <header class="top-bar">
+                <input type="text" id="doc-title" class="doc-title-input" value="Loading...">
+                <span class="status" id="save-status">Saved</span>
+            </header>
+            <div id="editor-scroll">
+                <div id="editor-content">
+                    <!-- TipTap instances per section will go here -->
+                </div>
+            </div>
+        </main>
+
+        <!-- Preview Panel & AI -->
+        <aside class="right-panel">
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab('preview')">IEEE Preview</button>
+                <button class="tab" onclick="switchTab('ai')">AI Assistant</button>
+            </div>
+
+            <div id="tab-preview" class="tab-content active">
+                <iframe id="latex-preview" style="width: 100%; height: 100%; border: none; background: white;"></iframe>
+            </div>
+
+            <div id="tab-ai" class="tab-content">
+                <div class="ai-header">AI Assistant</div>
+                <div id="ai-chat">
+                    <div class="ai-message system">Select text in the editor to enable AI commands.</div>
+                </div>
+                <div class="ai-input-area">
+                    <input type="text" placeholder="Ask AI to rewrite, shorten..." disabled>
+                </div>
+            </div>
+        </aside>
+    </div>
+
+    <!-- AI Feedback Modal -->
+    <div id="ai-modal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Review AI Suggestions</h3>
+                <span class="close-modal" style="cursor:pointer;" onclick="closeModal()">×</span>
+            </div>
+            <div class="diff-view">
+                <div class="diff-panel">
+                    <h4>Original</h4>
+                    <div id="diff-original"></div>
+                </div>
+                <div class="diff-panel" style="background: #e6f7ff;">
+                    <h4>Suggested</h4>
+                    <div id="diff-suggested"></div>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-secondary" onclick="closeModal()">Discard</button>
+                <button class="btn btn-primary" onclick="acceptAIChange()">Accept Change</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Authors Modal -->
+    <div id="authors-modal" class="modal-overlay">
+        <div class="modal-content"
+            style="max-width: 900px; height: 85vh; display: flex; flex-direction: column; padding: 0; overflow: hidden;">
+            <div class="modal-header"
+                style="flex-shrink: 0; padding: 15px 20px; border-bottom: 1px solid #eee; background: white;">
+                <h3 style="margin: 0;">Manage Authors</h3>
+                <span class="close-modal" style="cursor:pointer; font-size: 24px; line-height: 1;"
+                    onclick="closeAuthorsModal()">×</span>
+            </div>
+
+            <div class="authors-container" style="display: flex; flex: 1; overflow: hidden;">
+                <!-- Left: List -->
+                <div
+                    style="width: 300px; border-right: 1px solid #ddd; display: flex; flex-direction: column; background: #fafafa;">
+                    <div
+                        style="padding: 15px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; background: #f5f5f7;">
+                        <h4 style="margin: 0;">Authors List</h4>
+                        <button class="btn btn-primary" onclick="showAddAuthorForm()"
+                            style="padding: 4px 10px; font-size: 12px; height: auto;">+ New</button>
+                    </div>
+                    <div id="authors-list" style="flex: 1; overflow-y: auto; padding: 15px;"></div>
+                </div>
+
+                <!-- Right: Form -->
+                <div style="flex: 1; display: flex; flex-direction: column; overflow: hidden;">
+                    <div style="flex: 1; overflow-y: auto; padding: 20px;">
+                        <h4 id="author-form-title"
+                            style="margin-top: 0; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid #eee;">
+                            Add New Author</h4>
+                        <form id="author-form" onsubmit="event.preventDefault(); submitAuthorForm();">
+                            <input type="hidden" id="author-id">
+                            <div class="form-group" style="margin-bottom: 15px;">
+                                <label style="display: block; margin-bottom: 5px; font-weight: 500;">Name *</label>
+                                <input type="text" id="author-name" class="form-control" required
+                                    placeholder="e.g. John Doe"
+                                    style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                            </div>
+                            <div class="form-group" style="margin-bottom: 15px;">
+                                <label style="display: block; margin-bottom: 5px; font-weight: 500;">Department</label>
+                                <input type="text" id="author-dept" class="form-control"
+                                    placeholder="e.g. Dept. of Computer Science"
+                                    style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                            </div>
+                            <div class="form-group" style="margin-bottom: 15px;">
+                                <label
+                                    style="display: block; margin-bottom: 5px; font-weight: 500;">Organization</label>
+                                <input type="text" id="author-org" class="form-control"
+                                    placeholder="e.g. University of Example"
+                                    style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                            </div>
+                            <div class="form-group" style="display: flex; gap: 15px; margin-bottom: 15px;">
+                                <div style="flex: 1;">
+                                    <label style="display: block; margin-bottom: 5px; font-weight: 500;">City</label>
+                                    <input type="text" id="author-city" class="form-control" placeholder="City"
+                                        style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                                </div>
+                                <div style="flex: 1;">
+                                    <label style="display: block; margin-bottom: 5px; font-weight: 500;">Country</label>
+                                    <input type="text" id="author-country" class="form-control" placeholder="Country"
+                                        style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                                </div>
+                            </div>
+                            <div class="form-group" style="margin-bottom: 15px;">
+                                <label style="display: block; margin-bottom: 5px; font-weight: 500;">Email</label>
+                                <input type="email" id="author-email" class="form-control"
+                                    placeholder="email@example.com"
+                                    style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                            </div>
+                            <div id="author-form-error"
+                                style="color: #ff3b30; margin-bottom: 15px; padding: 10px; background: #fff2f2; border-radius: 4px; display: none;">
+                            </div>
+                            <div class="form-actions"
+                                style="margin-top: 20px; display: flex; gap: 10px; justify-content: flex-end; padding-top: 20px; border-top: 1px solid #eee;">
+                                <button type="button" class="btn btn-secondary" onclick="resetAuthorForm()"
+                                    style="background: #f5f5f7; color: #333; border: 1px solid #ddd;">Clear</button>
+                                <button type="submit" class="btn btn-primary" id="save-author-btn">Save Author</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Images Modal -->
+    <div id="images-modal" class="modal-overlay">
+        <div class="modal-content"
+            style="max-width: 950px; height: 88vh; display: flex; flex-direction: column; padding: 0; overflow: hidden;">
+            <div class="modal-header"
+                style="flex-shrink: 0; padding: 15px 20px; border-bottom: 1px solid #eee; background: white;">
+                <h3 style="margin: 0;">🖼 Manage Images</h3>
+                <span class="close-modal" style="cursor:pointer; font-size: 24px; line-height: 1;"
+                    onclick="closeImagesModal()">×</span>
+            </div>
+
+            <div style="display: flex; flex: 1; overflow: hidden;">
+                <!-- Left: Upload + Gallery -->
+                <div
+                    style="width: 340px; border-right: 1px solid #ddd; display: flex; flex-direction: column; background: #fafafa;">
+                    <!-- Drop Zone -->
+                    <div id="img-drop-zone" class="img-drop-zone">
+                        <div class="img-drop-icon">📁</div>
+                        <p style="margin: 8px 0 4px; font-weight: 500; font-size: 14px;">Drop image here</p>
+                        <p style="margin: 0; font-size: 12px; color: #888;">or click to browse</p>
+                        <input type="file" id="img-file-input" accept="image/*" style="display:none">
+                    </div>
+                    <!-- Gallery header -->
+                    <div style="padding: 10px 15px; border-bottom: 1px solid #eee; background: #f5f5f7;">
+                        <h4
+                            style="margin: 0; font-size: 12px; color: #666; text-transform: uppercase; letter-spacing: 0.05em;">
+                            Uploaded Images</h4>
+                    </div>
+                    <div id="images-gallery" style="flex: 1; overflow-y: auto; padding: 10px;">
+                        <!-- Thumbnails injected by JS -->
+                    </div>
+                </div>
+
+                <!-- Right: Edit Meta -->
+                <div style="flex: 1; display: flex; flex-direction: column; overflow: hidden;">
+                    <div style="flex: 1; overflow-y: auto; padding: 24px;">
+                        <!-- Image Preview -->
+                        <div id="img-preview-container"
+                            style="text-align: center; margin-bottom: 20px; min-height: 180px; background: #f0f0f5; border-radius: 10px; display: flex; align-items: center; justify-content: center; border: 2px dashed #ddd;">
+                            <span style="color: #bbb; font-size: 13px;">Select an image to preview &amp; edit</span>
+                        </div>
+
+                        <input type="hidden" id="img-selected-id">
+
+                        <div class="form-group" style="margin-bottom: 15px;">
+                            <label style="display: block; margin-bottom: 5px; font-weight: 500;">Caption</label>
+                            <input type="text" id="img-caption" class="form-control"
+                                placeholder="e.g. System architecture overview"
+                                style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;">
+                        </div>
+
+                        <div class="form-group" style="margin-bottom: 15px;">
+                            <label style="display: block; margin-bottom: 5px; font-weight: 500;">
+                                LaTeX Label <span style="font-weight:400; color:#888;">(used in \ref{})</span>
+                            </label>
+                            <input type="text" id="img-label" class="form-control" placeholder="e.g. fig:architecture"
+                                style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;">
+                        </div>
+
+                        <div class="form-group" style="margin-bottom: 15px;">
+                            <label style="display: block; margin-bottom: 5px; font-weight: 500;">📌 Place After
+                                Section</label>
+                            <select id="img-section" class="form-control"
+                                style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; background: white; font-size: 14px;">
+                                <option value="">— End of document (no specific section) —</option>
+                                <!-- Options filled by JS -->
+                            </select>
+                            <p style="margin: 5px 0 0; font-size: 12px; color: #888;">The figure will appear immediately
+                                after the selected section in the LaTeX output.</p>
+                        </div>
+
+                        <div class="form-group" style="margin-bottom: 15px;">
+                            <label style="display: block; margin-bottom: 5px; font-weight: 500;">
+                                Figure Width &nbsp;<span id="img-width-val"
+                                    style="font-weight:600; color:#007aff;">0.90× column</span>
+                            </label>
+                            <input type="range" id="img-width" min="0.2" max="1.0" step="0.05" value="0.9"
+                                oninput="document.getElementById('img-width-val').textContent = parseFloat(this.value).toFixed(2) + '× column'"
+                                style="width: 100%; accent-color: #007aff;">
+                            <div
+                                style="display: flex; justify-content: space-between; font-size: 11px; color: #aaa; margin-top: 2px;">
+                                <span>20%</span><span>50%</span><span>Full</span>
+                            </div>
+                        </div>
+
+                        <div id="img-form-error"
+                            style="color: #ff3b30; margin-bottom: 10px; padding: 10px; background: #fff2f2; border-radius: 4px; display: none;">
+                        </div>
+
+                        <div
+                            style="display: flex; gap: 10px; justify-content: flex-end; padding-top: 20px; border-top: 1px solid #eee; margin-top: 10px;">
+                            <button id="img-delete-btn" class="btn" onclick="deleteImage()"
+                                style="background: #ff3b30; color: white; display: none;">🗑 Delete</button>
+                            <button id="img-save-btn" class="btn btn-primary" onclick="saveImageMeta()"
+                                style="display: none;">Save Changes</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script type="module" src="/static/js/app.js?v=14"></script>
+</body>
+
+</html>
