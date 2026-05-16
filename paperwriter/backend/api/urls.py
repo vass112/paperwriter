@@ -1,11 +1,13 @@
 from django.urls import path, include
 from rest_framework import routers
-from .views import DocumentViewSet, AuthorViewSet, PaperImageViewSet, process_ai_command, export_latex, get_latex_source, export_pdf
+from .views import DocumentViewSet, AuthorViewSet, PaperImageViewSet, ReferenceViewSet, SectionViewSet, process_ai_command, export_latex, get_latex_source, export_pdf
 
 router = routers.DefaultRouter()
 router.register(r'documents', DocumentViewSet)
 router.register(r'authors', AuthorViewSet)
 router.register(r'images', PaperImageViewSet)
+router.register(r'references', ReferenceViewSet)
+router.register(r'sections', SectionViewSet)
 
 urlpatterns = [
     path('', include(router.urls)),

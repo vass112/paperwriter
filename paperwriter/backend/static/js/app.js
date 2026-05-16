@@ -6,76 +6,167 @@ let currentDocId = null;
 let saveTimeout;
 let previewUpdateTimeout;
 
-// AI State
-let currentAISectionId = null;
-let currentAISelection = null;
-let currentAIProposal = null;
+// CSRF helper for Django
 
-let activePreviewTab = true;
+// CSRF helper for Django
+function getCsrfToken() {
+    const name = 'csrftoken';
+    const cookies = document.cookie.split(';');
+    for (const c of cookies) {
+        const [k, v] = c.trim().split('=');
+        if (k === name) return decodeURIComponent(v);
+    }
+    return '';
+}
+
+// References State - declared at top to avoid Temporal Dead Zone errors
+let referencesList = [];
+let currentRefId = null;
+
+// Images State
+let imagesData = [];
 
 document.addEventListener('DOMContentLoaded', async () => {
     console.log("PaperWriter Frontend Initialized");
 
-    const aiInput = document.querySelector('.ai-input-area input');
-    if (aiInput) {
-        aiInput.addEventListener('keydown', async (e) => {
-            if (e.key === 'Enter' && !aiInput.disabled) {
-                handleAICommand(aiInput.value);
-                aiInput.value = '';
+    const app = document.getElementById('app');
+    const resizerLeft = document.getElementById('resizer-left');
+    const resizerRight = document.getElementById('resizer-right');
+    const sidebar = document.getElementById('sidebar');
+    const rightPanel = document.getElementById('right-panel');
+
+    let isResizingLeft = false;
+    let isResizingRight = false;
+
+    if (resizerLeft) {
+        resizerLeft.addEventListener('mousedown', (e) => {
+            isResizingLeft = true;
+            document.body.style.cursor = 'col-resize';
+            resizerLeft.classList.add('dragging');
+            document.body.classList.add('is-resizing');
+        });
+    }
+
+    if (resizerRight) {
+        resizerRight.addEventListener('mousedown', (e) => {
+            isResizingRight = true;
+            document.body.style.cursor = 'col-resize';
+            resizerRight.classList.add('dragging');
+            document.body.classList.add('is-resizing');
+        });
+    }
+
+    document.addEventListener('mousemove', (e) => {
+        if (isResizingLeft && sidebar && app) {
+            let newWidth = e.clientX;
+            
+            // Calculate limits based on dynamic window sizing
+            let rightWidth = rightPanel ? rightPanel.offsetWidth : 0;
+            // Ensure center panel has absolute minimum 350px width
+            let maxLeft = window.innerWidth - rightWidth - 350;
+            // Also ensure left sidebar never expands beyond its own maximum or squishes center
+            if (newWidth > maxLeft) {
+                newWidth = maxLeft;
+            }
+
+            // Left panel bounds: collapse at 120, max width 500
+            if (newWidth > 60 && newWidth < 500) {
+                if (newWidth < 120) {
+                    if (!sidebar.classList.contains('collapsed')) {
+                        sidebar.classList.add('collapsed');
+                        if (rightPanel) {
+                            let half = (window.innerWidth - 72) / 2;
+                            rightPanel.style.width = `${half}px`;
+                            app.style.setProperty('--right-panel-width', `${half}px`);
+                        }
+                    }
+                } else {
+                    sidebar.classList.remove('collapsed');
+                }
+                // Only resize if we haven't hit the center squish limit
+                if (newWidth <= maxLeft) {
+                    sidebar.style.width = `${newWidth}px`;
+                    app.style.setProperty('--sidebar-width', `${newWidth}px`);
+                }
+            }
+        }
+        if (isResizingRight && rightPanel && app) {
+            let newWidth = window.innerWidth - e.clientX;
+            let leftWidth = sidebar ? sidebar.offsetWidth : 0;
+            
+            // Ensure center panel has absolute minimum 350px width
+            let maxRight = window.innerWidth - leftWidth - 350;
+            if (newWidth > maxRight) {
+                newWidth = maxRight;
+            }
+
+            // Right panel bounds: absolute min width 300px
+            if (newWidth > 300 && newWidth < 800) {
+                if (newWidth <= maxRight) {
+                    rightPanel.style.width = `${newWidth}px`;
+                    app.style.setProperty('--right-panel-width', `${newWidth}px`);
+                }
+            }
+        }
+    });
+
+    document.addEventListener('mouseup', () => {
+        isResizingLeft = false;
+        isResizingRight = false;
+        document.body.style.cursor = 'default';
+        document.body.classList.remove('is-resizing');
+        if (resizerLeft) resizerLeft.classList.remove('dragging');
+        if (resizerRight) resizerRight.classList.remove('dragging');
+    });
+
+    // Sidebar Toggle
+    const sidebarToggle = document.getElementById('sidebar-toggle');
+    if (sidebarToggle && sidebar && app) {
+        sidebarToggle.addEventListener('click', () => {
+            const isCollapsed = sidebar.classList.toggle('collapsed');
+            if (isCollapsed) {
+                sidebar.style.width = '72px';
+                app.style.setProperty('--sidebar-width', '72px');
+                if (rightPanel) {
+                    let half = (window.innerWidth - 72) / 2;
+                    rightPanel.style.width = `${half}px`;
+                    app.style.setProperty('--right-panel-width', `${half}px`);
+                }
+            } else {
+                sidebar.style.width = '280px';
+                app.style.setProperty('--sidebar-width', '280px');
             }
         });
     }
 
-    window.closeModal = closeModal;
-    window.acceptAIChange = acceptAIChange;
-    window.switchTab = switchTab;
-    window.closeAuthorsModal = closeAuthorsModal;
-    window.editAuthor = editAuthor;
-    window.deleteAuthor = deleteAuthor;
+    // Modal Logic Improvements
+    const originalOpenModal = window.openModal;
+    window.openModal = (modalId) => {
+        const modal = document.getElementById(modalId);
+        if (modal) {
+            modal.style.display = 'flex';
+            setTimeout(() => modal.classList.add('active'), 10);
+        }
+    };
 
+    const originalCloseModal = window.closeModal;
+    window.closeModal = (modalId) => {
+        const modal = typeof modalId === 'string' ? document.getElementById(modalId) : modalId;
+        if (modal) {
+            modal.classList.remove('active');
+            setTimeout(() => modal.style.display = 'none', 300);
+        }
+    };
+
+    // Update existing button click handlers to use new openModal
     const authorsBtn = document.getElementById('authors-btn');
-    if (authorsBtn) {
-        authorsBtn.onclick = () => openAuthorsModal();
-    }
+    if (authorsBtn) authorsBtn.onclick = () => openAuthorsModal();
 
     const imagesBtn = document.getElementById('images-btn');
-    if (imagesBtn) {
-        imagesBtn.onclick = () => openImagesModal();
-    }
+    if (imagesBtn) imagesBtn.onclick = () => openImagesModal();
 
-    // Expose image functions to global scope
-    window.closeImagesModal = closeImagesModal;
-    window.deleteImage = deleteImage;
-    window.saveImageMeta = saveImageMeta;
-    window.selectImage = selectImage;
-    window.insertFigureRef = insertFigureRef;
-
-    const exportBtn = document.getElementById('export-btn');
-    if (exportBtn) {
-        exportBtn.textContent = "Export as PDF";
-        exportBtn.onclick = async () => {
-            if (currentDocId) {
-                try {
-                    const response = await fetch(`/api/document/${currentDocId}/export/pdf`);
-                    if (response.ok) {
-                        const blob = await response.blob();
-                        const url = window.URL.createObjectURL(blob);
-                        const a = document.createElement('a');
-                        a.href = url;
-                        a.download = `paper_${currentDocId}.pdf`;
-                        a.click();
-                        window.URL.revokeObjectURL(url);
-                    } else {
-                        const error = await response.json();
-                        alert(`PDF export failed: ${error.message || error.error}\n\nPlease wait for LaTeX installation to complete.`);
-                    }
-                } catch (e) {
-                    console.error('Export error:', e);
-                    alert('Export failed. LaTeX may still be installing.');
-                }
-            }
-        };
-    }
+    const referencesBtn = document.getElementById('references-btn');
+    if (referencesBtn) referencesBtn.onclick = () => openReferencesModal();
 
     try {
         const response = await fetch('/api/documents/');
@@ -84,32 +175,19 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (docs.length > 0) {
             currentDocId = docs[0].id;
             await loadDocument(currentDocId);
-        } else {
-            const titleEl = document.getElementById('doc-title');
-            if (titleEl) titleEl.value = "No documents found.";
         }
     } catch (e) {
         console.error("Failed to load documents:", e);
-        const titleEl = document.getElementById('doc-title');
-        if (titleEl) titleEl.value = "Error loading documents.";
     }
 });
 
-function switchTab(tabId) {
-    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-
-    const btn = document.querySelector(`button[onclick="switchTab('${tabId}')"]`);
-    if (btn) btn.classList.add('active');
-
-    const content = document.getElementById(`tab-${tabId}`);
-    if (content) content.classList.add('active');
-
-    activePreviewTab = (tabId === 'preview');
-}
+// (switchTab removed)
 
 async function loadDocument(id) {
     try {
+        currentDocId = id;
+        await fetchReferencesSilent();
+        
         const response = await fetch(`/api/documents/${id}/`);
         if (!response.ok) throw new Error("Document not found");
 
@@ -128,6 +206,18 @@ async function loadDocument(id) {
             });
         }
 
+        const indexTermsEl = document.getElementById('doc-index-terms');
+        if (indexTermsEl) {
+            indexTermsEl.value = doc.index_terms || '';
+            const newIndexTermsEl = indexTermsEl.cloneNode(true);
+            indexTermsEl.parentNode.replaceChild(newIndexTermsEl, indexTermsEl);
+            
+            newIndexTermsEl.addEventListener('blur', () => saveIndexTerms(newIndexTermsEl.value));
+            newIndexTermsEl.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') newIndexTermsEl.blur();
+            });
+        }
+
         const nav = document.getElementById('section-nav');
         const content = document.getElementById('editor-content');
 
@@ -135,23 +225,108 @@ async function loadDocument(id) {
         if (content) content.innerHTML = '';
         editors = {};
 
+        // Sort top-level sections
         const sections = doc.sections.sort((a, b) => a.order - b.order);
+        console.log("Sections to render:", sections.length, sections);
 
-        sections.forEach(section => {
+        const renderSectionNode = (section, depth = 1) => {
+            // --- Navigation Item ---
+            const navGroup = document.createElement('div');
+            navGroup.className = 'nav-group';
+            navGroup.style.position = 'relative';
+            
             const navItem = document.createElement('div');
-            navItem.className = 'nav-item';
-            navItem.textContent = section.title;
-            navItem.dataset.sectionId = section.id;
+            navItem.className = depth === 1 ? 'nav-item' : 'nav-subitem';
+            navItem.style.paddingLeft = `${depth === 1 ? 16 : 32 + (depth - 2) * 12}px`;
+            navItem.style.display = 'flex';
+            navItem.style.alignItems = 'center';
+            navItem.style.gap = '8px';
+            
+            const titleSpan = document.createElement('span');
+            titleSpan.textContent = section.title || (depth === 1 ? 'Untitled Section' : 'Untitled Subsection');
+            titleSpan.style.flex = '1';
+            titleSpan.style.overflow = 'hidden';
+            titleSpan.style.textOverflow = 'ellipsis';
+            navItem.appendChild(titleSpan);
+
+            // Action Buttons Container
+            const actions = document.createElement('div');
+            actions.className = 'nav-actions';
+            actions.style.display = 'flex';
+            actions.style.gap = '4px';
+            actions.style.opacity = '0';
+            actions.style.transition = 'opacity 0.2s';
+
+            // Add Subsection Button (+) in Sidebar
+            if (depth < 3) {
+                const addSub = document.createElement('div');
+                addSub.className = 'action-btn add-sub';
+                addSub.innerHTML = '+';
+                addSub.title = 'Add Subsection';
+                addSub.onclick = (e) => {
+                    e.stopPropagation();
+                    createSubsection(section.id);
+                };
+                actions.appendChild(addSub);
+            }
+
+            // Move Up Button
+            const upBtn = document.createElement('div');
+            upBtn.className = 'action-btn move-btn';
+            upBtn.innerHTML = '↑';
+            upBtn.title = 'Move Up';
+            upBtn.onclick = (e) => {
+                e.stopPropagation();
+                moveSection(section.id, 'up');
+            };
+            actions.appendChild(upBtn);
+
+            // Move Down Button
+            const downBtn = document.createElement('div');
+            downBtn.className = 'action-btn move-btn';
+            downBtn.innerHTML = '↓';
+            downBtn.title = 'Move Down';
+            downBtn.onclick = (e) => {
+                e.stopPropagation();
+                moveSection(section.id, 'down');
+            };
+            actions.appendChild(downBtn);
+
+            // Delete Button
+            const delBtn = document.createElement('div');
+            delBtn.className = 'action-btn delete-btn';
+            delBtn.innerHTML = '×';
+            delBtn.title = 'Delete Section';
+            delBtn.onclick = (e) => {
+                e.stopPropagation();
+                deleteSection(section.id);
+            };
+            actions.appendChild(delBtn);
+
+            navItem.appendChild(actions);
+
+            // Hover effect for actions
+            navItem.onmouseenter = () => actions.style.opacity = '1';
+            navItem.onmouseleave = () => actions.style.opacity = '0';
+
+            navItem.dataset.sectionId = section.id; // Crucial for title sync
             navItem.onclick = () => {
                 const target = document.getElementById(`section-${section.id}`);
                 if (target) {
-                    target.scrollIntoView({ behavior: 'smooth' });
-                    document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+                    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    document.querySelectorAll('.nav-item, .nav-subitem').forEach(el => el.classList.remove('active'));
                     navItem.classList.add('active');
                 }
             };
-            if (nav) nav.appendChild(navItem);
+            navGroup.appendChild(navItem);
+            const navContainer = document.getElementById('section-nav');
+            if (navContainer) {
+                navContainer.appendChild(navGroup);
+            } else {
+                console.error("Sidebar container #section-nav not found in the DOM!");
+            }
 
+            // --- Editor Block ---
             const sectionDiv = document.createElement('div');
             sectionDiv.className = 'section-block';
             sectionDiv.id = `section-${section.id}`;
@@ -162,46 +337,44 @@ async function loadDocument(id) {
             headerContainer.style.display = 'flex';
             headerContainer.style.alignItems = 'center';
             headerContainer.style.justifyContent = 'space-between';
-            headerContainer.style.marginBottom = '10px';
+            headerContainer.style.marginBottom = '20px';
 
             const header = document.createElement('input');
             header.type = 'text';
             header.className = 'section-title-input';
+            header.placeholder = depth === 1 ? 'Section Title' : 'Subsection Title';
             header.value = section.title;
+            header.style.fontSize = depth === 1 ? '1.5rem' : depth === 2 ? '1.2rem' : '1.1rem';
+            header.style.fontWeight = '700';
             header.dataset.sectionId = section.id;
             
-            // Auto update section title globally
-            header.addEventListener('blur', () => saveSectionTitle(section.id, header.value));
+            header.addEventListener('blur', () => {
+                saveSectionTitle(section.id, header.value);
+                titleSpan.textContent = header.value || (depth === 1 ? 'Untitled Section' : 'Untitled Subsection');
+            });
             header.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter') header.blur();
             });
 
-            const toolbar = document.createElement('div');
-            toolbar.className = 'editor-toolbar';
-            toolbar.innerHTML = `
-                <button onclick="editors[${section.id}].chain().focus().toggleBold().run()" title="Bold"><b>B</b></button>
-                <button onclick="editors[${section.id}].chain().focus().toggleItalic().run()" title="Italic"><i>I</i></button>
-                <button onclick="editors[${section.id}].chain().focus().toggleHeading({ level: 3 }).run()" title="Subheading (H3)">H3</button>
-                <button onclick="editors[${section.id}].chain().focus().toggleHeading({ level: 4 }).run()" title="Sub-subheading (H4)">H4</button>
-            `;
 
             headerContainer.appendChild(header);
-            headerContainer.appendChild(toolbar);
+            // (no toolbar — clean editor)
 
             const editorElement = document.createElement('div');
             editorElement.className = 'editor-area';
 
-            // --- 📷 Insert Figure Ref toolbar ---
             const figBar = document.createElement('div');
             figBar.className = 'fig-ref-bar';
             figBar.dataset.sectionId = section.id;
-            figBar.innerHTML = `
-                <span style="font-size:11px; color:#888; margin-right:6px;">Insert figure ref:</span>
-                <span class="fig-ref-placeholder" style="font-size:11px; color:#bbb; font-style:italic;">upload images first</span>
-            `;
+            
+            const citeBar = document.createElement('div');
+            citeBar.className = 'cite-ref-bar';
+            citeBar.dataset.sectionId = section.id;
+            citeBar.innerHTML = `<span style="font-size:11px; color:#bbb; font-style:italic;">Insert citation toolbar</span>`;
 
             sectionDiv.appendChild(headerContainer);
             sectionDiv.appendChild(figBar);
+            sectionDiv.appendChild(citeBar);
             sectionDiv.appendChild(editorElement);
             if (content) content.appendChild(sectionDiv);
 
@@ -209,24 +382,13 @@ async function loadDocument(id) {
                 const editor = new Editor({
                     element: editorElement,
                     extensions: [
-                        StarterKit.configure({
-                            heading: {
-                                levels: [3, 4],
-                            },
-                        }),
+                        StarterKit, // Use StarterKit with all defaults
                     ],
-                    content: section.content || `<p></p>`,
+                    content: section.content || '<p></p>',
                     onUpdate: ({ editor }) => {
                         handleEditorUpdate(section.id, editor.getHTML());
                     },
-                    onSelectionUpdate: ({ editor }) => {
-                        handleSelectionUpdate(section.id, editor);
-                    },
-                    editorProps: {
-                        attributes: {
-                            class: 'prose focus:outline-none',
-                        },
-                    },
+                    editorProps: { attributes: { class: 'prose focus:outline-none' } },
                 });
                 editors[section.id] = editor;
                 editors[section.id].sectionTitle = section.title;
@@ -234,8 +396,29 @@ async function loadDocument(id) {
             } catch (err) {
                 console.error("Failed to initialize editor", section.id, err);
             }
-        });
 
+            // Recursive subsections
+            if (section.subsections && section.subsections.length > 0) {
+                const subNavContainer = document.createElement('div');
+                section.subsections.sort((a, b) => a.order - b.order).forEach(sub => {
+                    subNavContainer.appendChild(renderSectionNode(sub, depth + 1));
+                });
+                navGroup.appendChild(subNavContainer);
+            }
+            return navGroup;
+        };
+
+        sections.forEach(s => nav.appendChild(renderSectionNode(s)));
+
+        // Add Section button in Sidebar
+        const addSectionBtn = document.createElement('div');
+        addSectionBtn.className = 'nav-item add-section-nav';
+        addSectionBtn.innerHTML = '<span style="color: var(--accent-color); font-weight: 600;">+ Add Section</span>';
+        addSectionBtn.onclick = () => createSection();
+        nav.appendChild(addSectionBtn);
+
+        updateCiteDropdowns();
+        updateFigRefBars();
         await updateLatexPreview();
 
     } catch (e) {
@@ -263,6 +446,27 @@ async function saveDocumentTitle(newTitle) {
     }
 }
 
+async function saveIndexTerms(newTerms) {
+    if (!currentDocId) return;
+    try {
+        const response = await fetch(`/api/documents/${currentDocId}/`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ index_terms: newTerms })
+        });
+        if (!response.ok) throw new Error("Failed to save index terms");
+        
+        const status = document.getElementById('save-status');
+        if (status) {
+            status.textContent = 'Saved';
+            status.style.color = '#86868b';
+        }
+        updateLatexPreview();
+    } catch (e) {
+        console.error("Error saving index terms:", e);
+    }
+}
+
 async function saveSectionTitle(sectionId, newTitle) {
     if (!newTitle.trim()) return; // Disallow empty titles
     try {
@@ -274,8 +478,8 @@ async function saveSectionTitle(sectionId, newTitle) {
         if (!response.ok) throw new Error("Failed to save section title");
         
         // Update sidebar nav item
-        const navItem = document.querySelector(`.nav-item[data-section-id="${sectionId}"]`);
-        if (navItem) navItem.textContent = newTitle.trim();
+        const navItemSpan = document.querySelector(`.nav-item[data-section-id="${sectionId}"] span, .nav-subitem[data-section-id="${sectionId}"] span`);
+        if (navItemSpan) navItemSpan.textContent = newTitle.trim();
 
         // Update editor object header
         if (editors[sectionId]) editors[sectionId].sectionTitle = newTitle.trim();
@@ -293,7 +497,44 @@ async function saveSectionTitle(sectionId, newTitle) {
     }
 }
 
+function updateSidebarSubitems(sectionId, content) {
+    const container = document.getElementById(`nav-subitems-${sectionId}`);
+    if (!container) return;
+    
+    container.innerHTML = '';
+    
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(content, 'text/html');
+    const h3s = doc.querySelectorAll('h3');
+    
+    h3s.forEach((h3, index) => {
+        const text = h3.textContent.trim();
+        if (!text) return;
+        
+        const subitem = document.createElement('div');
+        subitem.className = 'nav-subitem';
+        subitem.textContent = text;
+        subitem.title = text;
+        
+        subitem.onclick = (e) => {
+            e.stopPropagation();
+            const sectionEl = document.getElementById(`section-${sectionId}`);
+            if (sectionEl) {
+                const actualH3s = sectionEl.querySelectorAll('.ProseMirror h3');
+                if (actualH3s[index]) {
+                    actualH3s[index].scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    document.querySelectorAll('.nav-item, .nav-subitem').forEach(el => el.classList.remove('active'));
+                    subitem.classList.add('active');
+                }
+            }
+        };
+        
+        container.appendChild(subitem);
+    });
+}
+
 function handleEditorUpdate(sectionId, content) {
+    updateSidebarSubitems(sectionId, content);
     const status = document.getElementById('save-status');
     if (status) {
         status.textContent = 'Unsaved changes...';
@@ -311,6 +552,84 @@ function handleEditorUpdate(sectionId, content) {
     }, 1000);
 }
 
+async function createSection() {
+    if (!currentDocId) return;
+    const title = prompt("Enter section title:");
+    if (!title) return;
+
+    try {
+        const response = await fetch(`/api/documents/${currentDocId}/add_section/`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title: title })
+        });
+        if (!response.ok) throw new Error("Failed to create section");
+        await loadDocument(currentDocId);
+    } catch (e) {
+        console.error("Error creating section:", e);
+        alert("Failed to create section: " + e.message);
+    }
+}
+
+async function deleteSection(sectionId) {
+    if (!confirm("Are you sure you want to delete this section and all its contents?")) return;
+
+    try {
+        const response = await fetch(`/api/sections/${sectionId}/`, {
+            method: 'DELETE',
+            headers: { 'X-CSRFToken': getCsrfToken() }
+        });
+        if (!response.ok && response.status !== 204) throw new Error("Failed to delete section");
+        await loadDocument(currentDocId);
+    } catch (e) {
+        console.error("Error deleting section:", e);
+        alert("Delete failed: " + e.message);
+    }
+}
+
+async function createSubsection(parentId) {
+    const title = prompt("Enter subsection title:");
+    if (!title) return;
+
+    try {
+        const response = await fetch(`/api/documents/${currentDocId}/add_section/`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                title: title,
+                parent: parentId,
+                section_type: 'custom'
+            })
+        });
+        if (!response.ok) throw new Error("Failed to create subsection");
+        await loadDocument(currentDocId);
+    } catch (e) {
+        console.error("Error creating subsection:", e);
+        alert("Failed to create subsection: " + e.message);
+    }
+}
+
+window.createSubsection = createSubsection;
+
+async function moveSection(sectionId, direction) {
+    try {
+        const response = await fetch(`/api/sections/${sectionId}/move/`, {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken()
+            },
+            body: JSON.stringify({ direction: direction })
+        });
+        if (!response.ok) throw new Error("Failed to move section");
+        await loadDocument(currentDocId); 
+    } catch (e) {
+        console.error("Error moving section:", e);
+        alert("Move failed: " + e.message);
+    }
+}
+window.moveSection = moveSection;
+
 async function updateLatexPreview() {
     if (!currentDocId) return;
 
@@ -324,7 +643,7 @@ async function updateLatexPreview() {
             const url = URL.createObjectURL(blob);
             const iframe = document.getElementById('latex-preview');
             if (iframe) {
-                iframe.src = url;
+                iframe.src = url + '#toolbar=0&view=FitH&scrollbar=0';
             }
         } else {
             // Fallback to HTML rendering
@@ -372,6 +691,11 @@ function renderLatexAsHTML(latexSource) {
                 * {
                     box-sizing: border-box;
                 }
+                
+                ::-webkit-scrollbar { width: 6px; }
+                ::-webkit-scrollbar-track { background: transparent; }
+                ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.1); border-radius: 3px; }
+                ::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.2); }
                 
                 body {
                     font-family: "Times New Roman", Times, serif;
@@ -574,9 +898,12 @@ async function saveSection(sectionId, content) {
     }
 
     try {
-        const response = await fetch(`/api/section/${sectionId}`, {
+        const response = await fetch(`/api/sections/${sectionId}/`, {
             method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken()
+            },
             body: JSON.stringify({ content }),
         });
 
@@ -883,14 +1210,16 @@ async function deleteAuthor(authorId) {
 
     try {
         const response = await fetch(`/api/authors/${authorId}/`, {
-            method: 'DELETE'
+            method: 'DELETE',
+            headers: { 'X-CSRFToken': getCsrfToken() }
         });
 
-        if (response.ok) {
+        if (response.ok || response.status === 204) {
             await loadAuthors();
             await updateLatexPreview();
         } else {
-            alert('Failed to delete author');
+            const errText = await response.text();
+            alert('Failed to delete author: ' + errText);
         }
     } catch (e) {
         console.error('Error deleting author:', e);
@@ -901,8 +1230,7 @@ async function deleteAuthor(authorId) {
 // ============================================================
 // IMAGE MANAGEMENT
 // ============================================================
-
-let imagesData = []; // cache of images for current doc
+// (imagesData declared at top of file)
 
 async function openImagesModal() {
     const modal = document.getElementById('images-modal');
@@ -1190,4 +1518,259 @@ function insertFigureRef(sectionId, refLabel) {
     const editor = editors[sectionId];
     if (!editor) return;
     editor.chain().focus().insertContent(`\\ref{${refLabel}}`).run();
+}
+
+async function fetchReferencesSilent() {
+    if (!currentDocId) return;
+    try {
+        const response = await fetch(`/api/references/?document=${currentDocId}`);
+        referencesList = await response.json();
+        referencesList.sort((a, b) => a.id - b.id);
+    } catch (e) {
+        console.error("Error fetching references silently:", e);
+    }
+}
+
+function updateCiteDropdowns() {
+    document.querySelectorAll('.cite-ref-bar').forEach(bar => {
+        const sectionId = parseInt(bar.dataset.sectionId);
+        
+        if (referencesList.length === 0) {
+            bar.innerHTML = `
+                <span style="font-size:11px; color:#888; margin-right:6px;">Insert citation:</span>
+                <span style="font-size:11px; color:#bbb; font-style:italic;">add references first</span>`;
+            return;
+        }
+
+        let selectHtml = `<select onchange="if(this.value) { insertCitation(${sectionId}, this.value); this.value=''; }" style="font-size: 11px; padding: 2px 4px; border-radius: 4px; border: 1px solid #ddd; background: #fff; cursor: pointer;">`;
+        selectHtml += `<option value="">-- select to cite --</option>`;
+        referencesList.forEach(ref => {
+            selectHtml += `<option value="${ref.citation_key}">[${ref.citation_key}] ${escapeHtml(ref.description || '')}</option>`;
+        });
+        selectHtml += `</select>`;
+
+        bar.innerHTML = `<span style="font-size:11px; color:#888; margin-right:6px;">Insert citation:</span>` + selectHtml;
+    });
+}
+
+window.insertCitation = insertCitation;
+
+function insertCitation(sectionId, citeKey) {
+    const editor = editors[sectionId];
+    if (!editor) return;
+    editor.chain().focus().insertContent(`~\\cite{${citeKey}}`).run();
+}
+
+
+// ==========================================
+// REFERENCES (BibTeX) MANAGEMENT
+// ==========================================
+// (referencesList and currentRefId declared at top of file)
+
+function openReferencesModal() {
+    if (!currentDocId) {
+        alert("Please select a document first.");
+        return;
+    }
+    const modal = document.getElementById('references-modal');
+    if (modal) {
+        modal.classList.add('active');
+        fetchReferences();
+        showAddReferenceForm();
+    }
+}
+
+function closeReferencesModal() {
+    const modal = document.getElementById('references-modal');
+    if (modal) modal.classList.remove('active');
+}
+
+async function fetchReferences() {
+    if (!currentDocId) return;
+    try {
+        const response = await fetch(`/api/references/?document=${currentDocId}`);
+        referencesList = await response.json();
+        referencesList.sort((a, b) => a.id - b.id);
+        renderReferencesList();
+    } catch (e) {
+        console.error("Error fetching references:", e);
+    }
+}
+
+function renderReferencesList() {
+    const container = document.getElementById('references-list');
+    if (!container) return;
+    
+    container.innerHTML = '';
+    
+    if (referencesList.length === 0) {
+        container.innerHTML = '<p style="color: #888; text-align: center; margin-top: 20px; font-size: 13px;">No references yet.</p>';
+        return;
+    }
+    
+    referencesList.forEach(ref => {
+        const div = document.createElement('div');
+        div.style.padding = '12px 10px';
+        div.style.borderBottom = '1px solid #eee';
+        div.style.cursor = 'pointer';
+        div.style.backgroundColor = (currentRefId === ref.id) ? '#e6f7ff' : 'transparent';
+        
+        div.onclick = () => editReference(ref.id);
+        
+        div.onmouseover = () => { if (currentRefId !== ref.id) div.style.backgroundColor = '#f9f9f9'; };
+        div.onmouseout = () => { if (currentRefId !== ref.id) div.style.backgroundColor = 'transparent'; };
+        
+        div.innerHTML = `
+            <div style="font-weight: 600; font-size: 14px; margin-bottom: 4px; color: #333;">[${ref.citation_key}]</div>
+            <div style="font-size: 12px; color: #666; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                ${ref.description || 'No description'}
+            </div>
+        `;
+        
+        container.appendChild(div);
+    });
+}
+
+function showAddReferenceForm() {
+    currentRefId = null;
+    document.getElementById('reference-form-title').textContent = 'Add New BibTeX Reference';
+    document.getElementById('ref-id').value = '';
+    document.getElementById('ref-description').value = '';
+    document.getElementById('ref-key').value = '';
+    document.getElementById('ref-bibtex').value = '';
+    
+    document.getElementById('ref-delete-btn').style.display = 'none';
+    document.getElementById('ref-form-error').style.display = 'none';
+    
+    renderReferencesList();
+}
+
+function editReference(id) {
+    const ref = referencesList.find(r => r.id === id);
+    if (!ref) return;
+    
+    currentRefId = id;
+    document.getElementById('reference-form-title').textContent = 'Edit Reference';
+    document.getElementById('ref-id').value = ref.id;
+    document.getElementById('ref-description').value = ref.description || '';
+    document.getElementById('ref-key').value = ref.citation_key || '';
+    document.getElementById('ref-bibtex').value = ref.bibtex || '';
+    
+    document.getElementById('ref-delete-btn').style.display = 'block';
+    document.getElementById('ref-form-error').style.display = 'none';
+    
+    renderReferencesList();
+}
+
+function autoExtractBibTeXKey(bibtex) {
+    if (!bibtex) return;
+    const match = bibtex.match(/@[a-zA-Z]+{([^,]+),/);
+    if (match && match[1]) {
+        const inputKey = document.getElementById('ref-key');
+        if (!inputKey.value || currentRefId === null) {
+            inputKey.value = match[1].trim();
+        }
+    }
+}
+
+async function submitReferenceForm() {
+    if (!currentDocId) return;
+    
+    const id = document.getElementById('ref-id').value;
+    const description = document.getElementById('ref-description').value;
+    const key = document.getElementById('ref-key').value;
+    const bibtex = document.getElementById('ref-bibtex').value;
+    
+    const errDiv = document.getElementById('ref-form-error');
+    errDiv.style.display = 'none';
+    
+    if (!key || !bibtex) {
+        errDiv.textContent = 'Citation key and raw BibTeX are required.';
+        errDiv.style.display = 'block';
+        return;
+    }
+    
+    const isUpdate = !!id;
+    const url = isUpdate ? `/api/references/${id}/` : '/api/references/';
+    const method = isUpdate ? 'PUT' : 'POST';
+    
+    const payload = {
+        document: currentDocId,
+        citation_key: key,
+        description: description,
+        bibtex: bibtex
+    };
+    
+    try {
+        const response = await fetch(url, {
+            method: method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        
+        if (!response.ok) {
+            const err = await response.json();
+            throw new Error(JSON.stringify(err));
+        }
+        
+        await fetchReferences();
+        if (!isUpdate) {
+            showAddReferenceForm();
+        }
+        
+        updateLatexPreview();
+        updateCiteDropdowns();
+        
+    } catch (e) {
+        console.error("Error saving reference:", e);
+        errDiv.textContent = 'Error saving reference. Make sure the citation key does not have spaces or weird characters.';
+        errDiv.style.display = 'block';
+    }
+}
+
+async function deleteReference() {
+    if (!currentRefId) return;
+    if (!confirm("Are you sure you want to delete this reference?")) return;
+    
+    try {
+        const response = await fetch(`/api/references/${currentRefId}/`, {
+            method: 'DELETE'
+        });
+        
+        if (!response.ok) throw new Error("Failed to delete");
+        
+        await fetchReferences();
+        showAddReferenceForm();
+        updateLatexPreview();
+        updateCiteDropdowns();
+    } catch (e) {
+        console.error("Error deleting reference:", e);
+        alert("Failed to delete reference.");
+    }
+}
+// Global Exports for Modal Triggering
+window.openAuthorsModal = openAuthorsModal;
+window.closeAuthorsModal = closeAuthorsModal;
+window.openImagesModal = openImagesModal;
+window.closeImagesModal = closeImagesModal;
+window.openReferencesModal = openReferencesModal;
+window.closeReferencesModal = closeReferencesModal;
+window.editAuthor = editAuthor;
+window.deleteAuthor = deleteAuthor;
+window.switchTab = switchTab;
+window.createSection = createSection;
+window.createSubsection = createSubsection;
+window.deleteSection = deleteSection;
+
+function cleanContent(html) {
+    if (!html) return '';
+    // Remove common accessibility and navigation garbage
+    const badPhrases = [
+        'Skip to main content', 'Accessibility help', 'Accessibility feedback',
+        'Sign in', 'AI Mode', 'Insert citation toolbar', 'Insert fig ref toolbar',
+    ];
+    for (const phrase of badPhrases) {
+        if (html.includes(phrase)) return '<p></p>';
+    }
+    return html;
 }

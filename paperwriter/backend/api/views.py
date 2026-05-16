@@ -1,10 +1,10 @@
 from django.shortcuts import render
 from rest_framework import viewsets, generics, status
 from rest_framework.response import Response
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, action
 from rest_framework.parsers import MultiPartParser, FormParser
-from .models import Document, Section, Author, PaperImage
-from .serializers import DocumentSerializer, SectionSerializer, AuthorSerializer, PaperImageSerializer
+from .models import Document, Section, Author, PaperImage, Reference
+from .serializers import DocumentSerializer, SectionSerializer, AuthorSerializer, PaperImageSerializer, ReferenceSerializer
 import google.generativeai as genai
 from django.conf import settings
 from django.db.models import F
@@ -16,9 +16,70 @@ class DocumentViewSet(viewsets.ModelViewSet):
     queryset = Document.objects.all()
     serializer_class = DocumentSerializer
 
-class SectionUpdateView(generics.UpdateAPIView):
+    @action(detail=True, methods=['post'])
+    def add_section(self, request, pk=None):
+        document = self.get_object()
+        title = request.data.get('title')
+        parent_id = request.data.get('parent')
+        section_type = request.data.get('section_type', 'custom')
+        
+        if not title:
+            return Response({'error': 'Title is required'}, status=status.HTTP_400_BAD_REQUEST)
+            
+        parent = None
+        if parent_id:
+            try:
+                parent = Section.objects.get(id=parent_id, document=document)
+            except Section.DoesNotExist:
+                return Response({'error': 'Parent section not found'}, status=status.HTTP_404_NOT_FOUND)
+                
+        # Determine order
+        siblings = Section.objects.filter(document=document, parent=parent)
+        order = siblings.count() + 1
+        
+        section = Section.objects.create(
+            document=document,
+            parent=parent,
+            title=title,
+            order=order,
+            section_type=section_type
+        )
+        return Response(SectionSerializer(section).data, status=status.HTTP_201_CREATED)
+
+class SectionViewSet(viewsets.ModelViewSet):
     queryset = Section.objects.all()
     serializer_class = SectionSerializer
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        doc_id = self.request.query_params.get('document')
+        if doc_id:
+            qs = qs.filter(document=doc_id)
+        return qs
+
+    @action(detail=True, methods=['post'])
+    def move(self, request, pk=None):
+        section = self.get_object()
+        direction = request.data.get('direction')
+        
+        siblings = list(Section.objects.filter(document=section.document, parent=section.parent).order_by('order'))
+        for idx, s in enumerate(siblings):
+            if s.order != idx:
+                s.order = idx
+                s.save()
+                
+        current_idx = siblings.index(section)
+        if direction == 'up' and current_idx > 0:
+            siblings[current_idx], siblings[current_idx-1] = siblings[current_idx-1], siblings[current_idx]
+        elif direction == 'down' and current_idx < len(siblings) - 1:
+            siblings[current_idx], siblings[current_idx+1] = siblings[current_idx+1], siblings[current_idx]
+        else:
+            return Response({'status': 'no_change'})
+            
+        for idx, s in enumerate(siblings):
+            Section.objects.filter(id=s.id).update(order=idx)
+            
+        return Response({'status': 'ok'})
 
 class AuthorViewSet(viewsets.ModelViewSet):
     queryset = Author.objects.all()
@@ -43,6 +104,17 @@ class PaperImageViewSet(viewsets.ModelViewSet):
         context = super().get_serializer_context()
         context['request'] = self.request
         return context
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        doc_id = self.request.query_params.get('document')
+        if doc_id:
+            qs = qs.filter(document=doc_id)
+        return qs
+
+class ReferenceViewSet(viewsets.ModelViewSet):
+    queryset = Reference.objects.all()
+    serializer_class = ReferenceSerializer
 
     def get_queryset(self):
         qs = super().get_queryset()
@@ -190,37 +262,70 @@ def generate_latex_source(document):
         lines.append("")
         return lines
 
-    for section in sections:
-        content = section.content or ""
+    def process_content_html(content):
+        if not content:
+            return ""
+        # Convert simple HTML tags to LaTeX
         text = re.sub(r'<p>(.*?)</p>', r'\1\n\n', content)
-        text = re.sub(r'<h3>(.*?)</h3>', r'\\subsection{\1}\n\n', text)
-        text = re.sub(r'<h4>(.*?)</h4>', r'\\subsubsection{\1}\n\n', text)
+        # Remove any existing h3/h4 formatting as we now use real subsections
+        text = re.sub(r'<h3>(.*?)</h3>', r'\1\n\n', text)
+        text = re.sub(r'<h4>(.*?)</h4>', r'\1\n\n', text)
         text = re.sub(r'<strong>(.*?)</strong>', r'\\textbf{\1}', text)
         text = re.sub(r'<em>(.*?)</em>', r'\\textit{\1}', text)
         text = text.replace('&nbsp;', ' ').replace('&lt;', '<').replace('&gt;', '>')
-        processed_content = text.strip()
+        return text.strip()
+
+    def emit_section(section, depth=1):
+        lines = []
+        processed_content = process_content_html(section.content)
 
         if section.section_type == 'abstract':
-            latex_content.append(r"\begin{abstract}")
-            latex_content.append(processed_content)
-            latex_content.append(r"\end{abstract}")
-            latex_content.append(r"\begin{IEEEkeywords}")
-            latex_content.append(r"component, formatting, style, styling, insert.")
-            latex_content.append(r"\end{IEEEkeywords}")
+            lines.append(r"\begin{abstract}")
+            lines.append(processed_content)
+            lines.append(r"\end{abstract}")
+            if document.index_terms:
+                lines.append(r"\begin{IEEEkeywords}")
+                lines.append(document.index_terms)
+                lines.append(r"\end{IEEEkeywords}")
         elif section.section_type == 'references':
-            latex_content.append(r"\section{References}")
-            latex_content.append(processed_content)
+            if not document.references.exists():
+                lines.append(r"\section{References}")
+                lines.append(processed_content)
         else:
-            latex_content.append(f"\\section{{{section.title}}}")
-            latex_content.append(processed_content)
+            # Determine heading level
+            if depth == 1:
+                cmd = "section"
+            elif depth == 2:
+                cmd = "subsection"
+            else:
+                cmd = "subsubsection"
+            
+            lines.append(f"\\{cmd}{{{section.title}}}")
+            if processed_content:
+                lines.append(processed_content)
 
-        # Emit figures assigned to this section
+        # Emit figures assigned to SHOULD happen after content or within content? 
+        # Usually figures are floating, but we emit them here for local context.
         for img in section_images.get(section.id, []):
-            latex_content.extend(emit_figure(img))
+            lines.extend(emit_figure(img))
 
-    # Emit unassigned figures at the end
-    for img in unassigned_images:
-        latex_content.extend(emit_figure(img))
+        # Recursively emit subsections
+        subsections = section.subsections.all().order_by('order')
+        for sub in subsections:
+            lines.extend(emit_section(sub, depth + 1))
+            
+        return lines
+
+    # Only process top-level sections (where parent is None)
+    top_sections = document.sections.filter(parent=None).order_by('order')
+    
+    for section in top_sections:
+        latex_content.extend(emit_section(section, depth=1))
+
+    # Output Bibliography if references exist
+    if document.references.exists():
+        latex_content.append(r"\bibliographystyle{IEEEtran}")
+        latex_content.append(r"\bibliography{refs}")
 
     latex_content.append(r"\end{document}")
     return "\n".join(latex_content)
@@ -252,6 +357,14 @@ def export_pdf(request, doc_id):
             with open(tex_path, 'w', encoding='utf-8') as f:
                 f.write(latex_source)
             
+            # Write BibTeX file if references exist
+            refs = document.references.all()
+            if refs.exists():
+                bib_path = os.path.join(tmpdir, 'refs.bib')
+                with open(bib_path, 'w', encoding='utf-8') as f:
+                    for ref in refs:
+                        f.write(ref.bibtex + "\n\n")
+
             # Copy IEEEtran.cls
             cls_source = os.path.join(settings.BASE_DIR.parent, 'ieee_format', 'IEEEtran.cls')
             import shutil
@@ -282,15 +395,20 @@ def export_pdf(request, doc_id):
                         env['PATH'] = miktex_path + os.pathsep + env.get('PATH', '')
                         break
                 
-                # Run pdflatex twice for proper references
-                for _ in range(2):
-                    result = subprocess.run(
-                        ['pdflatex', '-interaction=nonstopmode', 'paper.tex'],
-                        cwd=tmpdir,
-                        capture_output=True,
-                        timeout=120,
-                        env=env
-                    )
+                # Run pdflatex + bibtex + pdflatex twice
+                subprocess.run(['pdflatex', '-interaction=nonstopmode', 'paper.tex'], cwd=tmpdir, capture_output=True, timeout=120, env=env)
+                
+                if refs.exists():
+                    subprocess.run(['bibtex', 'paper'], cwd=tmpdir, capture_output=True, timeout=60, env=env)
+                    subprocess.run(['pdflatex', '-interaction=nonstopmode', 'paper.tex'], cwd=tmpdir, capture_output=True, timeout=120, env=env)
+                
+                result = subprocess.run(
+                    ['pdflatex', '-interaction=nonstopmode', 'paper.tex'],
+                    cwd=tmpdir,
+                    capture_output=True,
+                    timeout=120,
+                    env=env
+                )
                 
                 pdf_path = os.path.join(tmpdir, 'paper.pdf')
                 if os.path.exists(pdf_path):
@@ -302,7 +420,14 @@ def export_pdf(request, doc_id):
                     response['Content-Disposition'] = f'attachment; filename=paper_{doc_id}.pdf'
                     return response
                 else:
-                    return Response({'error': 'PDF compilation failed', 'log': result.stderr.decode()}, status=500)
+                    stdout = result.stdout.decode('utf-8', errors='replace')
+                    stderr = result.stderr.decode('utf-8', errors='replace')
+                    print(f"PDF compilation failed.\nSTDOUT: {stdout}\nSTDERR: {stderr}")
+                    return Response({
+                        'error': 'PDF compilation failed', 
+                        'log': stderr,
+                        'full_log': stdout
+                    }, status=500)
                     
             except FileNotFoundError:
                 # pdflatex not available, return error with suggestion
@@ -323,10 +448,18 @@ def export_latex(request, doc_id):
         document = Document.objects.get(id=doc_id)
         latex_source = generate_latex_source(document)
 
+        import io
+        import zipfile
         # Create ZIP in memory
         zip_buffer = io.BytesIO()
         with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
             zip_file.writestr(f"paper_{doc_id}.tex", latex_source)
+            
+            # Write BibTeX if references exist
+            refs = document.references.all()
+            if refs.exists():
+                bib_content = "\n\n".join([ref.bibtex for ref in refs])
+                zip_file.writestr("refs.bib", bib_content)
             
             cls_path = os.path.join(settings.BASE_DIR.parent, 'ieee_format', 'IEEEtran.cls')
             if os.path.exists(cls_path):
@@ -335,6 +468,11 @@ def export_latex(request, doc_id):
             fig_path = os.path.join(settings.BASE_DIR.parent, 'ieee_format', 'fig1.png')
             if os.path.exists(fig_path):
                 zip_file.write(fig_path, 'fig1.png')
+            
+            for img in document.images.all():
+                img_disk_path = img.image.path
+                if os.path.exists(img_disk_path):
+                    zip_file.write(img_disk_path, os.path.basename(img_disk_path))
 
         from django.http import HttpResponse
         response = HttpResponse(zip_buffer.getvalue(), content_type="application/zip")

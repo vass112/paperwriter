@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PaperWriter</title>
-    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="/static/css/style.css?v=29">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
@@ -28,22 +28,49 @@
 <body>
     <div id="app">
         <!-- Sidebar -->
-        <aside class="sidebar">
-            <div class="logo">PaperWriter</div>
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">PaperWriter</div>
+                <button id="sidebar-toggle" class="icon-btn" title="Toggle Sidebar">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+                </button>
+            </div>
             <nav id="section-nav">
                 <!-- Sections populated by JS -->
             </nav>
             <div class="export-controls">
-                <button id="authors-btn" style="background: #34c759; margin-bottom: 10px;">Manage Authors</button>
-                <button id="images-btn" style="background: #ff9500; margin-bottom: 10px;">🖼 Manage Images</button>
-                <button id="export-btn">Export PDF</button>
+                <button id="authors-btn" class="btn-secondary">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                    <span>Authors</span>
+                </button>
+                <button id="images-btn" class="btn-secondary">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                    <span>Images</span>
+                </button>
+                <button id="references-btn" class="btn-secondary">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+                    <span>References</span>
+                </button>
+                <button id="export-btn" class="btn-primary">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                    <span>Export PDF</span>
+                </button>
             </div>
         </aside>
+
+        <!-- Sidebar-Editor Resizer -->
+        <div class="resizer" id="resizer-left"></div>
 
         <!-- Main Editor -->
         <main class="editor-container">
             <header class="top-bar">
-                <input type="text" id="doc-title" class="doc-title-input" value="Loading...">
+                <div style="flex: 1;">
+                    <input type="text" id="doc-title" class="doc-title-input" placeholder="Enter Paper Title...">
+                    <div class="index-terms-container">
+                        <label for="doc-index-terms">Index Terms:</label>
+                        <input type="text" id="doc-index-terms" class="transparent-input" placeholder="e.g. machine learning, radar, FMCW...">
+                    </div>
+                </div>
                 <span class="status" id="save-status">Saved</span>
             </header>
             <div id="editor-scroll">
@@ -53,130 +80,74 @@
             </div>
         </main>
 
-        <!-- Preview Panel & AI -->
-        <aside class="right-panel">
-            <div class="tabs">
-                <button class="tab active" onclick="switchTab('preview')">IEEE Preview</button>
-                <button class="tab" onclick="switchTab('ai')">AI Assistant</button>
-            </div>
+        <!-- Editor-Right Resizer -->
+        <div class="resizer" id="resizer-right"></div>
 
-            <div id="tab-preview" class="tab-content active">
-                <iframe id="latex-preview" style="width: 100%; height: 100%; border: none; background: white;"></iframe>
-            </div>
-
-            <div id="tab-ai" class="tab-content">
-                <div class="ai-header">AI Assistant</div>
-                <div id="ai-chat">
-                    <div class="ai-message system">Select text in the editor to enable AI commands.</div>
-                </div>
-                <div class="ai-input-area">
-                    <input type="text" placeholder="Ask AI to rewrite, shorten..." disabled>
+        <!-- Preview Panel -->
+        <aside class="right-panel" id="right-panel">
+            <!-- Full Height Preview -->
+            <div id="tab-preview" style="flex: 1; display: flex; flex-direction: column; height: 100%; background: var(--panel-bg); overflow: hidden;">
+                <div class="preview-frame-container">
+                    <iframe id="latex-preview"></iframe>
                 </div>
             </div>
         </aside>
     </div>
 
-    <!-- AI Feedback Modal -->
-    <div id="ai-modal" class="modal-overlay">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>Review AI Suggestions</h3>
-                <span class="close-modal" style="cursor:pointer;" onclick="closeModal()">×</span>
-            </div>
-            <div class="diff-view">
-                <div class="diff-panel">
-                    <h4>Original</h4>
-                    <div id="diff-original"></div>
-                </div>
-                <div class="diff-panel" style="background: #e6f7ff;">
-                    <h4>Suggested</h4>
-                    <div id="diff-suggested"></div>
-                </div>
-            </div>
-            <div class="modal-actions">
-                <button class="btn btn-secondary" onclick="closeModal()">Discard</button>
-                <button class="btn btn-primary" onclick="acceptAIChange()">Accept Change</button>
-            </div>
-        </div>
-    </div>
-
     <!-- Authors Modal -->
     <div id="authors-modal" class="modal-overlay">
-        <div class="modal-content"
-            style="max-width: 900px; height: 85vh; display: flex; flex-direction: column; padding: 0; overflow: hidden;">
-            <div class="modal-header"
-                style="flex-shrink: 0; padding: 15px 20px; border-bottom: 1px solid #eee; background: white;">
-                <h3 style="margin: 0;">Manage Authors</h3>
-                <span class="close-modal" style="cursor:pointer; font-size: 24px; line-height: 1;"
-                    onclick="closeAuthorsModal()">×</span>
+        <div class="modal-content authors-modal-content">
+            <div class="modal-header">
+                <h3>Manage Authors</h3>
+                <span class="close-modal" onclick="closeAuthorsModal()">×</span>
             </div>
 
-            <div class="authors-container" style="display: flex; flex: 1; overflow: hidden;">
+            <div class="modal-body-split">
                 <!-- Left: List -->
-                <div
-                    style="width: 300px; border-right: 1px solid #ddd; display: flex; flex-direction: column; background: #fafafa;">
-                    <div
-                        style="padding: 15px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; background: #f5f5f7;">
-                        <h4 style="margin: 0;">Authors List</h4>
-                        <button class="btn btn-primary" onclick="showAddAuthorForm()"
-                            style="padding: 4px 10px; font-size: 12px; height: auto;">+ New</button>
+                <div class="modal-sidebar">
+                    <div class="modal-sidebar-header">
+                        <h4>Authors List</h4>
+                        <button class="btn-primary sm" onclick="showAddAuthorForm()">+ New</button>
                     </div>
-                    <div id="authors-list" style="flex: 1; overflow-y: auto; padding: 15px;"></div>
+                    <div id="authors-list" class="modal-list scroll-minimal"></div>
                 </div>
 
                 <!-- Right: Form -->
-                <div style="flex: 1; display: flex; flex-direction: column; overflow: hidden;">
-                    <div style="flex: 1; overflow-y: auto; padding: 20px;">
-                        <h4 id="author-form-title"
-                            style="margin-top: 0; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid #eee;">
-                            Add New Author</h4>
+                <div class="modal-main">
+                    <div class="modal-form-container scroll-minimal">
+                        <h4 id="author-form-title">Add New Author</h4>
                         <form id="author-form" onsubmit="event.preventDefault(); submitAuthorForm();">
                             <input type="hidden" id="author-id">
-                            <div class="form-group" style="margin-bottom: 15px;">
-                                <label style="display: block; margin-bottom: 5px; font-weight: 500;">Name *</label>
-                                <input type="text" id="author-name" class="form-control" required
-                                    placeholder="e.g. John Doe"
-                                    style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                            <div class="modal-input-group">
+                                <label>Name *</label>
+                                <input type="text" id="author-name" class="modal-input" required placeholder="e.g. John Doe">
                             </div>
-                            <div class="form-group" style="margin-bottom: 15px;">
-                                <label style="display: block; margin-bottom: 5px; font-weight: 500;">Department</label>
-                                <input type="text" id="author-dept" class="form-control"
-                                    placeholder="e.g. Dept. of Computer Science"
-                                    style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                            <div class="modal-input-group">
+                                <label>Department</label>
+                                <input type="text" id="author-dept" class="modal-input" placeholder="e.g. Dept. of Computer Science">
                             </div>
-                            <div class="form-group" style="margin-bottom: 15px;">
-                                <label
-                                    style="display: block; margin-bottom: 5px; font-weight: 500;">Organization</label>
-                                <input type="text" id="author-org" class="form-control"
-                                    placeholder="e.g. University of Example"
-                                    style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                            <div class="modal-input-group">
+                                <label>Organization</label>
+                                <input type="text" id="author-org" class="modal-input" placeholder="e.g. University of Example">
                             </div>
-                            <div class="form-group" style="display: flex; gap: 15px; margin-bottom: 15px;">
-                                <div style="flex: 1;">
-                                    <label style="display: block; margin-bottom: 5px; font-weight: 500;">City</label>
-                                    <input type="text" id="author-city" class="form-control" placeholder="City"
-                                        style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                            <div class="modal-form-grid">
+                                <div class="modal-input-group">
+                                    <label>City</label>
+                                    <input type="text" id="author-city" class="modal-input" placeholder="City">
                                 </div>
-                                <div style="flex: 1;">
-                                    <label style="display: block; margin-bottom: 5px; font-weight: 500;">Country</label>
-                                    <input type="text" id="author-country" class="form-control" placeholder="Country"
-                                        style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                                <div class="modal-input-group">
+                                    <label>Country</label>
+                                    <input type="text" id="author-country" class="modal-input" placeholder="Country">
                                 </div>
                             </div>
-                            <div class="form-group" style="margin-bottom: 15px;">
-                                <label style="display: block; margin-bottom: 5px; font-weight: 500;">Email</label>
-                                <input type="email" id="author-email" class="form-control"
-                                    placeholder="email@example.com"
-                                    style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                            <div class="modal-input-group">
+                                <label>Email</label>
+                                <input type="email" id="author-email" class="modal-input" placeholder="email@example.com">
                             </div>
-                            <div id="author-form-error"
-                                style="color: #ff3b30; margin-bottom: 15px; padding: 10px; background: #fff2f2; border-radius: 4px; display: none;">
-                            </div>
-                            <div class="form-actions"
-                                style="margin-top: 20px; display: flex; gap: 10px; justify-content: flex-end; padding-top: 20px; border-top: 1px solid #eee;">
-                                <button type="button" class="btn btn-secondary" onclick="resetAuthorForm()"
-                                    style="background: #f5f5f7; color: #333; border: 1px solid #ddd;">Clear</button>
-                                <button type="submit" class="btn btn-primary" id="save-author-btn">Save Author</button>
+                            <div id="author-form-error" class="modal-error"></div>
+                            <div class="modal-actions-footer">
+                                <button type="button" class="btn-secondary" onclick="resetAuthorForm()">Clear</button>
+                                <button type="submit" class="btn-primary" id="save-author-btn">Save Author</button>
                             </div>
                         </form>
                     </div>
@@ -187,99 +158,56 @@
 
     <!-- Images Modal -->
     <div id="images-modal" class="modal-overlay">
-        <div class="modal-content"
-            style="max-width: 950px; height: 88vh; display: flex; flex-direction: column; padding: 0; overflow: hidden;">
-            <div class="modal-header"
-                style="flex-shrink: 0; padding: 15px 20px; border-bottom: 1px solid #eee; background: white;">
-                <h3 style="margin: 0;">🖼 Manage Images</h3>
-                <span class="close-modal" style="cursor:pointer; font-size: 24px; line-height: 1;"
-                    onclick="closeImagesModal()">×</span>
+        <div class="modal-content images-modal-content">
+            <div class="modal-header">
+                <h3>Manage Images</h3>
+                <span class="close-modal" onclick="closeImagesModal()">×</span>
             </div>
 
-            <div style="display: flex; flex: 1; overflow: hidden;">
+            <div class="modal-body-split">
                 <!-- Left: Upload + Gallery -->
-                <div
-                    style="width: 340px; border-right: 1px solid #ddd; display: flex; flex-direction: column; background: #fafafa;">
-                    <!-- Drop Zone -->
-                    <div id="img-drop-zone" class="img-drop-zone">
-                        <div class="img-drop-icon">📁</div>
-                        <p style="margin: 8px 0 4px; font-weight: 500; font-size: 14px;">Drop image here</p>
-                        <p style="margin: 0; font-size: 12px; color: #888;">or click to browse</p>
+                <div class="modal-sidebar wider">
+                    <div id="img-drop-zone" class="modal-drop-zone">
+                        <div class="drop-icon">📁</div>
+                        <p class="drop-text">Drop image here</p>
+                        <p class="drop-subtext">or click to browse</p>
                         <input type="file" id="img-file-input" accept="image/*" style="display:none">
                     </div>
-                    <!-- Gallery header -->
-                    <div style="padding: 10px 15px; border-bottom: 1px solid #eee; background: #f5f5f7;">
-                        <h4
-                            style="margin: 0; font-size: 12px; color: #666; text-transform: uppercase; letter-spacing: 0.05em;">
-                            Uploaded Images</h4>
+                    <div class="modal-sidebar-header mini">
+                        <h4>Uploaded Images</h4>
                     </div>
-                    <div id="images-gallery" style="flex: 1; overflow-y: auto; padding: 10px;">
-                        <!-- Thumbnails injected by JS -->
-                    </div>
+                    <div id="images-gallery" class="modal-list scroll-minimal"></div>
                 </div>
 
                 <!-- Right: Edit Meta -->
-                <div style="flex: 1; display: flex; flex-direction: column; overflow: hidden;">
-                    <div style="flex: 1; overflow-y: auto; padding: 24px;">
-                        <!-- Image Preview -->
-                        <div id="img-preview-container"
-                            style="text-align: center; margin-bottom: 20px; min-height: 180px; background: #f0f0f5; border-radius: 10px; display: flex; align-items: center; justify-content: center; border: 2px dashed #ddd;">
-                            <span style="color: #bbb; font-size: 13px;">Select an image to preview &amp; edit</span>
+                <div class="modal-main">
+                    <div class="modal-form-container scroll-minimal">
+                        <div id="img-preview-container" class="modal-img-preview">
+                            <span>Select an image to preview & edit</span>
                         </div>
-
                         <input type="hidden" id="img-selected-id">
-
-                        <div class="form-group" style="margin-bottom: 15px;">
-                            <label style="display: block; margin-bottom: 5px; font-weight: 500;">Caption</label>
-                            <input type="text" id="img-caption" class="form-control"
-                                placeholder="e.g. System architecture overview"
-                                style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;">
+                        <div class="modal-input-group">
+                            <label>Caption</label>
+                            <input type="text" id="img-caption" class="modal-input" placeholder="e.g. System architecture overview">
                         </div>
-
-                        <div class="form-group" style="margin-bottom: 15px;">
-                            <label style="display: block; margin-bottom: 5px; font-weight: 500;">
-                                LaTeX Label <span style="font-weight:400; color:#888;">(used in \ref{})</span>
-                            </label>
-                            <input type="text" id="img-label" class="form-control" placeholder="e.g. fig:architecture"
-                                style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;">
+                        <div class="modal-input-group">
+                            <label>LaTeX Label</label>
+                            <input type="text" id="img-label" class="modal-input" placeholder="e.g. fig:architecture">
                         </div>
-
-                        <div class="form-group" style="margin-bottom: 15px;">
-                            <label style="display: block; margin-bottom: 5px; font-weight: 500;">📌 Place After
-                                Section</label>
-                            <select id="img-section" class="form-control"
-                                style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; background: white; font-size: 14px;">
-                                <option value="">— End of document (no specific section) —</option>
-                                <!-- Options filled by JS -->
+                        <div class="modal-input-group">
+                            <label>Place After Section</label>
+                            <select id="img-section" class="modal-select">
+                                <option value="">— End of document —</option>
                             </select>
-                            <p style="margin: 5px 0 0; font-size: 12px; color: #888;">The figure will appear immediately
-                                after the selected section in the LaTeX output.</p>
                         </div>
-
-                        <div class="form-group" style="margin-bottom: 15px;">
-                            <label style="display: block; margin-bottom: 5px; font-weight: 500;">
-                                Figure Width &nbsp;<span id="img-width-val"
-                                    style="font-weight:600; color:#007aff;">0.90× column</span>
-                            </label>
-                            <input type="range" id="img-width" min="0.2" max="1.0" step="0.05" value="0.9"
-                                oninput="document.getElementById('img-width-val').textContent = parseFloat(this.value).toFixed(2) + '× column'"
-                                style="width: 100%; accent-color: #007aff;">
-                            <div
-                                style="display: flex; justify-content: space-between; font-size: 11px; color: #aaa; margin-top: 2px;">
-                                <span>20%</span><span>50%</span><span>Full</span>
-                            </div>
+                        <div class="modal-input-group">
+                            <label>Figure Width: <span id="img-width-val">0.90× column</span></label>
+                            <input type="range" id="img-width" min="0.2" max="1.0" step="0.05" value="0.9" class="modal-range">
                         </div>
-
-                        <div id="img-form-error"
-                            style="color: #ff3b30; margin-bottom: 10px; padding: 10px; background: #fff2f2; border-radius: 4px; display: none;">
-                        </div>
-
-                        <div
-                            style="display: flex; gap: 10px; justify-content: flex-end; padding-top: 20px; border-top: 1px solid #eee; margin-top: 10px;">
-                            <button id="img-delete-btn" class="btn" onclick="deleteImage()"
-                                style="background: #ff3b30; color: white; display: none;">🗑 Delete</button>
-                            <button id="img-save-btn" class="btn btn-primary" onclick="saveImageMeta()"
-                                style="display: none;">Save Changes</button>
+                        <div id="img-form-error" class="modal-error"></div>
+                        <div class="modal-actions-footer">
+                            <button id="img-delete-btn" class="btn-danger" onclick="deleteImage()" style="display: none;">Delete</button>
+                            <button id="img-save-btn" class="btn-primary" onclick="saveImageMeta()" style="display: none;">Save Changes</button>
                         </div>
                     </div>
                 </div>
@@ -287,8 +215,60 @@
         </div>
     </div>
 
+    <!-- References Modal -->
+    <div id="references-modal" class="modal-overlay">
+        <div class="modal-content references-modal-content">
+            <div class="modal-header">
+                <h3>Manage References</h3>
+                <span class="close-modal" onclick="closeReferencesModal()">×</span>
+            </div>
+
+            <div class="modal-body-split">
+                <!-- Left: List -->
+                <div class="modal-sidebar">
+                    <div class="modal-sidebar-header">
+                        <h4>References</h4>
+                        <button class="btn-primary sm" onclick="showAddReferenceForm()">+ New</button>
+                    </div>
+                    <div id="references-list" class="modal-list scroll-minimal"></div>
+                </div>
+
+                <!-- Right: Form -->
+                <div class="modal-main">
+                    <div class="modal-form-container scroll-minimal">
+                        <h4 id="reference-form-title">Add New BibTeX Reference</h4>
+                        <div class="modal-info-box">
+                            Paste your raw BibTeX entry below. We will automatically extract the citation key.
+                        </div>
+                        <form id="reference-form" onsubmit="event.preventDefault(); submitReferenceForm();">
+                            <input type="hidden" id="ref-id">
+                            <div class="modal-input-group">
+                                <label>Description (Optional)</label>
+                                <input type="text" id="ref-description" class="modal-input" placeholder="e.g. Smith et al. 2023 Study">
+                            </div>
+                            <div class="modal-input-group">
+                                <label>Citation Key</label>
+                                <input type="text" id="ref-key" class="modal-input mono" placeholder="e.g. smith2023" required>
+                            </div>
+                            <div class="modal-input-group expand">
+                                <label>Raw BibTeX *</label>
+                                <textarea id="ref-bibtex" class="modal-textarea mono" required placeholder="@article{...}" oninput="autoExtractBibTeXKey(this.value)"></textarea>
+                            </div>
+                            <div id="ref-form-error" class="modal-error"></div>
+                            <div class="modal-actions-footer">
+                                <button type="button" id="ref-delete-btn" class="btn-danger" onclick="deleteReference()" style="display: none;">Delete</button>
+                                <button type="button" class="btn-secondary" onclick="closeReferencesModal()">Cancel</button>
+                                <button type="submit" class="btn-primary">Save Reference</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Scripts -->
-    <script type="module" src="/static/js/app.js?v=14"></script>
+    <script type="module" src="/static/js/app.js?v=32"></script>
 </body>
 
 </html>

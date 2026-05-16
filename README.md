@@ -9,7 +9,7 @@
 | Layer | Technology | Purpose |
 |-------|-----------|---------|
 | **Backend Framework** | Django 6.0 | Web framework, ORM, template rendering |
-| **REST API** | Django REST Framework 3.16 | RESTful API endpoints for all CRUD operations |
+| **REST API** | Django REST Framework 3.16 | RESTful API endpoints foLr all CRUD operations |
 | **Database** | SQLite 3 | Lightweight relational database (development) |
 | **AI Integration** | Google Generative AI (Gemini) | AI-assisted writing (rewrite, shorten, expand text) |
 | **PDF Generation** | LaTeX (pdflatex) | IEEE-format PDF export via LaTeX compilation |
