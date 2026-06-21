@@ -56,7 +56,8 @@ class Section(models.Model):
 class PaperImage(models.Model):
     document = models.ForeignKey(Document, related_name='images', on_delete=models.CASCADE)
     section  = models.ForeignKey(Section, related_name='images', null=True, blank=True, on_delete=models.SET_NULL)
-    image = models.ImageField(upload_to='paper_images/')
+    image_base64 = models.TextField(blank=True, default='')
+    filename = models.CharField(max_length=255, default='image.png')
     caption = models.CharField(max_length=500, blank=True, default='')
     label = models.CharField(max_length=100, blank=True, default='',
                              help_text='LaTeX label for \\ref{}, e.g. fig:architecture')

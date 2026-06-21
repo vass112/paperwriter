@@ -378,7 +378,7 @@ def generate_latex_source(document):
 
     def emit_figure(img):
         """Return a list of LaTeX lines for a single figure."""
-        filename = _os.path.basename(img.image.name)
+        filename = img.filename
         label    = img.label or f'fig{img.id}'
         caption  = img.caption or ''
         width    = max(0.1, min(1.0, img.width or 0.9))
@@ -599,18 +599,11 @@ def compile_pdf_online(latex_source, document, cls_source):
             print("Error reading IEEEtran.cls for online compile:", e)
             
     for img in document.images.all():
-        img_disk_path = img.image.path
-        if os.path.exists(img_disk_path):
-            try:
-                with open(img_disk_path, 'rb') as f:
-                    img_data = f.read()
-                base64_data = base64.b64encode(img_data).decode('utf-8')
-                resources.append({
-                    "path": os.path.basename(img_disk_path),
-                    "file": base64_data
-                })
-            except Exception as e:
-                print(f"Error reading image {img.id} for online compile:", e)
+        if img.image_base64:
+            resources.append({
+                "path": img.filename,
+                "file": img.image_base64
+            })
                 
     payload = {
         "compiler": "pdflatex",
@@ -671,9 +664,11 @@ def export_pdf(request, doc_id):
 
                 # Copy uploaded images into tmpdir
                 for img in document.images.all():
-                    img_disk_path = img.image.path
-                    if os.path.exists(img_disk_path):
-                        shutil.copy(img_disk_path, os.path.join(tmpdir, os.path.basename(img_disk_path)))
+                    if img.image_base64:
+                        img_disk_path = os.path.join(tmpdir, img.filename)
+                        import base64
+                        with open(img_disk_path, 'wb') as f:
+                            f.write(base64.b64decode(img.image_base64))
                 
                 # Update PATH to include MiKTeX
                 import copy

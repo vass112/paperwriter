@@ -49,18 +49,31 @@ class AuthorSerializer(serializers.ModelSerializer):
         model = Author
         fields = ['id', 'document', 'name', 'department', 'organization', 'city', 'country', 'email', 'order']
 
+import base64
+
 class PaperImageSerializer(serializers.ModelSerializer):
     image_url = serializers.SerializerMethodField()
+    image = serializers.FileField(write_only=True, required=False)
 
     class Meta:
         model = PaperImage
         fields = ['id', 'document', 'section', 'image', 'image_url', 'caption', 'label', 'width', 'order', 'uploaded_at']
         read_only_fields = ['uploaded_at', 'image_url']
 
+    def create(self, validated_data):
+        image_file = validated_data.pop('image', None)
+        instance = super().create(validated_data)
+        if image_file:
+            instance.filename = image_file.name
+            instance.image_base64 = base64.b64encode(image_file.read()).decode('utf-8')
+            instance.save()
+        return instance
+
     def get_image_url(self, obj):
-        request = self.context.get('request')
-        if obj.image and request:
-            return request.build_absolute_uri(obj.image.url)
+        if obj.image_base64:
+            ext = obj.filename.split('.')[-1].lower() if obj.filename else 'png'
+            if ext == 'jpg': ext = 'jpeg'
+            return f"data:image/{ext};base64,{obj.image_base64}"
         return None
 
 class DocumentSerializer(serializers.ModelSerializer):
