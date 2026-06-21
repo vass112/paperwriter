@@ -675,14 +675,8 @@ async function loadDocument(id) {
             const figBar = document.createElement('div');
             figBar.className = 'fig-ref-bar';
             figBar.dataset.sectionId = section.id;
-            
-            const citeBar = document.createElement('div');
-            citeBar.className = 'cite-ref-bar';
-            citeBar.dataset.sectionId = section.id;
-
             sectionDiv.appendChild(headerContainer);
             sectionDiv.appendChild(figBar);
-            sectionDiv.appendChild(citeBar);
             sectionDiv.appendChild(editorElement);
             if (content) content.appendChild(sectionDiv);
 
@@ -732,9 +726,7 @@ async function loadDocument(id) {
         addSectionBtn.onclick = () => createSection();
         nav.appendChild(addSectionBtn);
 
-        updateCiteDropdowns();
         updateFigRefBars();
-        updateStats();
         await updateLatexPreview();
 
     } catch (e) {
@@ -1858,25 +1850,7 @@ async function fetchReferencesSilent() {
     }
 }
 
-function updateCiteDropdowns() {
-    document.querySelectorAll('.cite-ref-bar').forEach(bar => {
-        const sectionId = parseInt(bar.dataset.sectionId);
-        
-        if (referencesList.length === 0) {
-            bar.innerHTML = '';
-            return;
-        }
 
-        let selectHtml = `<select onchange="if(this.value) { insertCitation(${sectionId}, this.value); this.value=''; }" style="font-size: 11px; padding: 3px 6px; border-radius: 2px; border: 1px solid var(--brand-200); background: var(--brand-50); cursor: pointer; color: var(--brand-700); font-family: inherit;">`;
-        selectHtml += `<option value="">— cite —</option>`;
-        referencesList.forEach(ref => {
-            selectHtml += `<option value="${ref.citation_key}">[${ref.citation_key}] ${escapeHtml(ref.description || '')}</option>`;
-        });
-        selectHtml += `</select>`;
-
-        bar.innerHTML = `<span style="font-size:11px; color:var(--brand-400); margin-right:6px;">Insert citation:</span>` + selectHtml;
-    });
-}
 
 window.insertCitation = insertCitation;
 
