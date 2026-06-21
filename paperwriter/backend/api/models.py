@@ -146,10 +146,10 @@ def create_user_profile(sender, instance, created, **kwargs):
         # Create Author
         Author.objects.create(
             document=doc,
-            name=instance.get_full_name() or instance.username or "Demo User",
+            name="Demo Researcher",
             department="Department of Research",
             organization="PaperWriter University",
-            email=instance.email,
+            email="researcher@example.com",
             order=1
         )
 
