@@ -3,18 +3,123 @@ from rest_framework import viewsets, generics, status
 from rest_framework.response import Response
 from rest_framework.decorators import api_view, action
 from rest_framework.parsers import MultiPartParser, FormParser
-from .models import Document, Section, Author, PaperImage, Reference
-from .serializers import DocumentSerializer, SectionSerializer, AuthorSerializer, PaperImageSerializer, ReferenceSerializer
+from .models import Document, Section, Author, PaperImage, Reference, PaperTable, Comment
+from .serializers import DocumentSerializer, SectionSerializer, AuthorSerializer, PaperImageSerializer, ReferenceSerializer, PaperTableSerializer, CommentSerializer
 import google.generativeai as genai
 from django.conf import settings
 from django.db.models import F
+import os
+from django.contrib.auth import login, logout
+from django.contrib.auth.models import User
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
 
 def home(request):
-    return render(request, 'index.html')
+    return render(request, 'index.html', {'google_client_id': settings.GOOGLE_CLIENT_ID})
+
+@api_view(['POST'])
+def dev_login(request):
+    """Bypass for local development so we don't need to configure Google OAuth origins for every local port."""
+    if not settings.DEBUG:
+        return Response({"error": "Only available in debug mode"}, status=status.HTTP_403_FORBIDDEN)
+    
+    user, created = User.objects.get_or_create(username='dev_test_user', email='dev@example.com')
+    if created:
+        user.first_name = 'Dev'
+        user.last_name = 'User'
+        user.save()
+        UserProfile.objects.create(user=user)
+    
+    login(request, user)
+    return Response({"success": True, "message": "Logged in as dev_test_user"})
+
+@api_view(['POST'])
+def google_auth(request):
+    token = request.data.get('token')
+    if not token:
+        return Response({'error': 'Token is required'}, status=400)
+    try:
+        idinfo = id_token.verify_oauth2_token(token, google_requests.Request(), settings.GOOGLE_CLIENT_ID)
+        email = idinfo['email']
+        first_name = idinfo.get('given_name', '')
+        last_name = idinfo.get('family_name', '')
+        
+        user, created = User.objects.get_or_create(
+            username=email,
+            defaults={
+                'email': email,
+                'first_name': first_name,
+                'last_name': last_name
+            }
+        )
+        login(request, user)
+        profile = getattr(user, 'profile', None)
+        consent = False
+        if profile:
+            consent = profile.dpdp_consent_processing
+        return Response({'success': True, 'dpdp_consent': consent})
+    except Exception as e:
+        return Response({'error': str(e)}, status=400)
+
+@api_view(['POST'])
+def logout_user(request):
+    logout(request)
+    return Response({'success': True})
+
+@api_view(['GET', 'POST'])
+def user_profile(request):
+    if not request.user.is_authenticated:
+        return Response({'error': 'Not authenticated'}, status=401)
+    
+    profile = request.user.profile
+    if request.method == 'GET':
+        return Response({
+            'username': request.user.username,
+            'email': request.user.email,
+            'first_name': request.user.first_name,
+            'last_name': request.user.last_name,
+            'dpdp_consent_processing': profile.dpdp_consent_processing,
+            'dpdp_consent_communication': profile.dpdp_consent_communication,
+            'dpdp_consent_date': profile.dpdp_consent_date
+        })
+    elif request.method == 'POST':
+        from django.utils import timezone
+        # If user explicitly gives consent now
+        if request.data.get('dpdp_consent_processing') and not profile.dpdp_consent_processing:
+            profile.dpdp_consent_date = timezone.now()
+            
+        profile.dpdp_consent_processing = request.data.get('dpdp_consent_processing', profile.dpdp_consent_processing)
+        profile.dpdp_consent_communication = request.data.get('dpdp_consent_communication', profile.dpdp_consent_communication)
+        profile.save()
+        return Response({'success': True})
+
+@api_view(['POST'])
+def delete_account(request):
+    if not request.user.is_authenticated:
+        return Response({'error': 'Not authenticated'}, status=401)
+    # Hard delete user for DPDP "Right to be Forgotten"
+    user = request.user
+    logout(request)
+    user.delete()
+    return Response({'success': True})
+
 
 class DocumentViewSet(viewsets.ModelViewSet):
     queryset = Document.objects.all()
     serializer_class = DocumentSerializer
+
+    def get_queryset(self):
+        if self.request.user.is_authenticated:
+            return Document.objects.filter(user=self.request.user)
+        if not os.getenv('DATABASE_URL'):
+            return Document.objects.all()
+        return Document.objects.none()
+
+    def perform_create(self, serializer):
+        if self.request.user.is_authenticated:
+            serializer.save(user=self.request.user)
+        else:
+            serializer.save()
 
     @action(detail=True, methods=['post'])
     def add_section(self, request, pk=None):
@@ -178,6 +283,7 @@ def generate_latex_source(document):
         r"\usepackage{amsmath,amssymb,amsfonts}",
         r"\usepackage{algorithmic}",
         r"\usepackage{graphicx}",
+        r"\usepackage{booktabs}",
         r"\usepackage{textcomp}",
         r"\usepackage{xcolor}",
         r"\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em",
@@ -230,7 +336,7 @@ def generate_latex_source(document):
         r"\maketitle",
     ])
     
-    import re, os as _os
+    import re, os as _os, json
 
     sections = document.sections.all().order_by('order')
 
@@ -243,6 +349,13 @@ def generate_latex_source(document):
             section_images.setdefault(img.section_id, []).append(img)
         else:
             unassigned_images.append(img)
+
+    # Pre-build a map: section_id -> list of tables assigned to it
+    all_tables = list(document.tables.all().order_by('order', 'created_at'))
+    section_tables = {}   # section_id -> [table, ...]
+    for t in all_tables:
+        if t.section_id:
+            section_tables.setdefault(t.section_id, []).append(t)
 
     def emit_figure(img):
         """Return a list of LaTeX lines for a single figure."""
@@ -260,6 +373,81 @@ def generate_latex_source(document):
         lines.append(f"\\label{{{label}}}")
         lines.append(r"\end{figure}")
         lines.append("")
+        return lines
+
+    def emit_table(table):
+        """Return a list of LaTeX lines for a single table."""
+        label = table.label or f'tab{table.id}'
+        caption = table.caption or ''
+        try:
+            grid = json.loads(table.content)
+        except Exception:
+            grid = [["Column 1", "Column 2"], ["Data 1", "Data 2"]]
+        
+        if not isinstance(grid, list) or not grid:
+            return []
+        
+        cols_count = max(len(row) for row in grid) if grid else 0
+        if cols_count == 0:
+            return []
+        
+        style = getattr(table, 'style', 'standard')
+        
+        # 1. Column formatting rules
+        if style == 'booktabs' or style == 'no_vertical' or style == 'minimal':
+            col_format = "c" * cols_count
+        else: # standard
+            col_format = "|" + "c|" * cols_count
+        
+        lines = [
+            r"\begin{table}[htbp]",
+            r"\centering",
+            f"\\caption{{{caption}}}" if caption else "",
+            f"\\label{{{label}}}",
+            f"\\begin{{tabular}}{{{col_format}}}",
+        ]
+        
+        # 2. Top rule
+        if style == 'booktabs' or style == 'minimal':
+            lines.append(r"\toprule")
+        else:
+            lines.append(r"\hline")
+        
+        # 3. Add rows and horizontal rules
+        for i, row in enumerate(grid):
+            cells = [str(cell) for cell in row] + [""] * (cols_count - len(row))
+            clean_cells = []
+            for cell in cells:
+                c = cell.replace('&', r'\&').replace('%', r'\%').replace('$', r'\$').replace('_', r'\_').replace('#', r'\#')
+                clean_cells.append(c)
+            
+            row_str = " & ".join(clean_cells) + r" \\"
+            
+            if i == 0:  # Header row
+                if style == 'booktabs':
+                    row_str += r" \midrule"
+                elif style == 'minimal':
+                    pass
+                else:  # standard and no_vertical
+                    row_str += r" \hline"
+            else:  # Data rows
+                if i == len(grid) - 1:  # Last row
+                    if style == 'booktabs' or style == 'minimal':
+                        row_str += r" \bottomrule"
+                    else:  # standard and no_vertical
+                        row_str += r" \hline"
+                else:  # Intermediate rows
+                    if style == 'standard':
+                        row_str += r" \hline"
+                    # booktabs, minimal, no_vertical have no intermediate lines!
+            
+            lines.append(row_str)
+            
+        lines.extend([
+            r"\end{tabular}",
+            r"\end{table}",
+            ""
+        ])
         return lines
 
     def process_content_html(content):
@@ -304,10 +492,13 @@ def generate_latex_source(document):
             if processed_content:
                 lines.append(processed_content)
 
-        # Emit figures assigned to SHOULD happen after content or within content? 
-        # Usually figures are floating, but we emit them here for local context.
+        # Emit figures assigned to section
         for img in section_images.get(section.id, []):
             lines.extend(emit_figure(img))
+
+        # Emit tables assigned to section
+        for t in section_tables.get(section.id, []):
+            lines.extend(emit_table(t))
 
         # Recursively emit subsections
         subsections = section.subsections.all().order_by('order')
@@ -340,6 +531,74 @@ def get_latex_source(request, doc_id):
     except Document.DoesNotExist:
         return Response({'error': 'Document not found'}, status=404)
 
+def compile_pdf_online(latex_source, document, cls_source):
+    import requests
+    import base64
+    
+    resources = [
+        {
+            "path": "paper.tex",
+            "content": latex_source,
+            "main": True
+        }
+    ]
+    
+    refs = document.references.all()
+    if refs.exists():
+        bib_content = ""
+        for ref in refs:
+            bib_content += ref.bibtex + "\n\n"
+        resources.append({
+            "path": "refs.bib",
+            "content": bib_content
+        })
+        
+    if os.path.exists(cls_source):
+        try:
+            with open(cls_source, 'r', encoding='utf-8', errors='replace') as f:
+                cls_content = f.read()
+            resources.append({
+                "path": "IEEEtran.cls",
+                "content": cls_content
+            })
+        except Exception as e:
+            print("Error reading IEEEtran.cls for online compile:", e)
+            
+    for img in document.images.all():
+        img_disk_path = img.image.path
+        if os.path.exists(img_disk_path):
+            try:
+                with open(img_disk_path, 'rb') as f:
+                    img_data = f.read()
+                base64_data = base64.b64encode(img_data).decode('utf-8')
+                resources.append({
+                    "path": os.path.basename(img_disk_path),
+                    "file": base64_data
+                })
+            except Exception as e:
+                print(f"Error reading image {img.id} for online compile:", e)
+                
+    payload = {
+        "compiler": "pdflatex",
+        "resources": resources
+    }
+    
+    try:
+        response = requests.post(
+            'https://latex.ytotech.com/builds/sync',
+            json=payload,
+            headers={'Content-Type': 'application/json'},
+            timeout=45
+        )
+        if response.status_code == 201:
+            return response.content
+        else:
+            print(f"Online compile failed: {response.status_code} - {response.text}")
+            return None
+    except Exception as e:
+        print("Online compile exception:", e)
+        return None
+
 @api_view(['GET'])
 def export_pdf(request, doc_id):
     """Compile LaTeX to PDF and return it"""
@@ -347,38 +606,41 @@ def export_pdf(request, doc_id):
         document = Document.objects.get(id=doc_id)
         latex_source = generate_latex_source(document)
         
-        # Create temporary directory for compilation
         import tempfile
         import subprocess
         
-        with tempfile.TemporaryDirectory() as tmpdir:
-            # Write LaTeX file
-            tex_path = os.path.join(tmpdir, 'paper.tex')
-            with open(tex_path, 'w', encoding='utf-8') as f:
-                f.write(latex_source)
-            
-            # Write BibTeX file if references exist
-            refs = document.references.all()
-            if refs.exists():
-                bib_path = os.path.join(tmpdir, 'refs.bib')
-                with open(bib_path, 'w', encoding='utf-8') as f:
-                    for ref in refs:
-                        f.write(ref.bibtex + "\n\n")
+        cls_source = os.path.join(settings.BASE_DIR.parent, 'ieee_format', 'IEEEtran.cls')
+        
+        # Try to compile with pdflatex
+        try:
+            if 'VERCEL' in os.environ:
+                raise FileNotFoundError("Force online compile on Vercel")
+                
+            with tempfile.TemporaryDirectory() as tmpdir:
+                # Write LaTeX file
+                tex_path = os.path.join(tmpdir, 'paper.tex')
+                with open(tex_path, 'w', encoding='utf-8') as f:
+                    f.write(latex_source)
+                
+                # Write BibTeX file if references exist
+                refs = document.references.all()
+                if refs.exists():
+                    bib_path = os.path.join(tmpdir, 'refs.bib')
+                    with open(bib_path, 'w', encoding='utf-8') as f:
+                        for ref in refs:
+                            f.write(ref.bibtex + "\n\n")
 
-            # Copy IEEEtran.cls
-            cls_source = os.path.join(settings.BASE_DIR.parent, 'ieee_format', 'IEEEtran.cls')
-            import shutil
-            if os.path.exists(cls_source):
-                shutil.copy(cls_source, os.path.join(tmpdir, 'IEEEtran.cls'))
+                # Copy IEEEtran.cls
+                import shutil
+                if os.path.exists(cls_source):
+                    shutil.copy(cls_source, os.path.join(tmpdir, 'IEEEtran.cls'))
 
-            # Copy uploaded images into tmpdir
-            for img in document.images.all():
-                img_disk_path = img.image.path
-                if os.path.exists(img_disk_path):
-                    shutil.copy(img_disk_path, os.path.join(tmpdir, os.path.basename(img_disk_path)))
-            
-            # Try to compile with pdflatex
-            try:
+                # Copy uploaded images into tmpdir
+                for img in document.images.all():
+                    img_disk_path = img.image.path
+                    if os.path.exists(img_disk_path):
+                        shutil.copy(img_disk_path, os.path.join(tmpdir, os.path.basename(img_disk_path)))
+                
                 # Update PATH to include MiKTeX
                 import copy
                 env = copy.copy(os.environ)
@@ -429,14 +691,28 @@ def export_pdf(request, doc_id):
                         'full_log': stdout
                     }, status=500)
                     
-            except FileNotFoundError:
-                # pdflatex not available, return error with suggestion
-                return Response({
-                    'error': 'LaTeX compiler not installed',
-                    'message': 'Please install MiKTeX or TeX Live to enable PDF export'
-                }, status=503)
-            except subprocess.TimeoutExpired:
-                return Response({'error': 'Compilation timeout'}, status=500)
+        except (FileNotFoundError, OSError):
+            print("Local compiler not found, attempting online compilation fallback...")
+            pdf_content = compile_pdf_online(latex_source, document, cls_source)
+            if pdf_content:
+                from django.http import HttpResponse
+                response = HttpResponse(pdf_content, content_type='application/pdf')
+                response['Content-Disposition'] = f'attachment; filename=paper_{doc_id}.pdf'
+                return response
+            
+            return Response({
+                'error': 'LaTeX compilation failed',
+                'message': 'Local compiler not found and online fallback compilation failed.'
+            }, status=503)
+        except subprocess.TimeoutExpired:
+            print("Local compiler timed out, attempting online compilation fallback...")
+            pdf_content = compile_pdf_online(latex_source, document, cls_source)
+            if pdf_content:
+                from django.http import HttpResponse
+                response = HttpResponse(pdf_content, content_type='application/pdf')
+                response['Content-Disposition'] = f'attachment; filename=paper_{doc_id}.pdf'
+                return response
+            return Response({'error': 'Compilation timeout'}, status=500)
                 
     except Document.DoesNotExist:
         return Response({'error': 'Document not found'}, status=404)
@@ -481,3 +757,112 @@ def export_latex(request, doc_id):
         
     except Document.DoesNotExist:
         return Response({'error': 'Document not found'}, status=404)
+
+class PaperTableViewSet(viewsets.ModelViewSet):
+    queryset = PaperTable.objects.all()
+    serializer_class = PaperTableSerializer
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        doc_id = self.request.query_params.get('document')
+        if doc_id:
+            qs = qs.filter(document=doc_id)
+        return qs
+
+class CommentViewSet(viewsets.ModelViewSet):
+    queryset = Comment.objects.all()
+    serializer_class = CommentSerializer
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        doc_id = self.request.query_params.get('document')
+        if doc_id:
+            qs = qs.filter(document=doc_id)
+        return qs
+
+@api_view(['POST'])
+def process_ai_equation(request):
+    """
+    Generate LaTeX equation using Gemini.
+    Accepts:
+    - description (text) OR
+    - image (file)
+    """
+    description = request.data.get('description')
+    image_file = request.FILES.get('image')
+    
+    try:
+        api_key = settings.GEMINI_API_KEY
+        if not api_key:
+            return Response({'error': 'GEMINI_API_KEY not configured'}, status=500)
+            
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel('gemini-2.0-flash')
+        
+        if image_file:
+            img_data = image_file.read()
+            mime_type = image_file.content_type
+            
+            contents = [
+                {
+                    'mime_type': mime_type,
+                    'data': img_data
+                },
+                "Return only the LaTeX code for the mathematical equation shown in this image. Do not wrap in markdown, code block backticks (like ```), or begin/end document wrappers. Return the equation itself, suitable for inclusion inside a LaTeX equation block (e.g., no \\begin{equation} or $ wrapper, just the core math expression like \\frac{a}{b} = c)."
+            ]
+            response = model.generate_content(contents)
+            latex = response.text.strip()
+        elif description:
+            prompt = f"""
+            Convert the following plain English description of a mathematical equation into a standard LaTeX equation. 
+            Return only the raw LaTeX code. Do not wrap in markdown, backticks, or LaTeX document wrappers. 
+            Return only the core math expression (e.g. no \\begin{{equation}} or $ wrapper, just the core math expression like \\frac{{a}}{{b}} = c).
+            
+            Description:
+            "{description}"
+            """
+            response = model.generate_content(prompt)
+            latex = response.text.strip()
+        else:
+            return Response({'error': 'Either description or image is required'}, status=400)
+        
+        if latex.startswith("```"):
+            lines = latex.split('\n')
+            if lines[0].startswith("```"):
+                lines = lines[1:]
+            if lines and lines[-1].startswith("```"):
+                lines = lines[:-1]
+            latex = "\n".join(lines).strip()
+            
+        return Response({'latex': latex})
+        
+    except Exception as e:
+        return Response({'error': str(e)}, status=500)
+
+@api_view(['POST'])
+def fetch_doi(request):
+    doi = request.data.get('doi', '').strip()
+    if not doi:
+        return Response({'error': 'DOI is required'}, status=400)
+    
+    if doi.startswith('http://doi.org/'):
+        doi = doi[len('http://doi.org/'):]
+    elif doi.startswith('https://doi.org/'):
+        doi = doi[len('https://doi.org/'):]
+    elif doi.startswith('doi:'):
+        doi = doi[len('doi:'):]
+    
+    import urllib.request
+    import urllib.error
+    import urllib.parse
+    
+    url = f"https://doi.org/{urllib.parse.quote(doi)}"
+    req = urllib.request.Request(url, headers={'Accept': 'application/x-bibtex'})
+    try:
+        with urllib.request.urlopen(req, timeout=10) as response:
+            bibtex = response.read().decode('utf-8')
+            return Response({'bibtex': bibtex})
+    except urllib.error.HTTPError as e:
+        return Response({'error': f"DOI resolver returned error: {e.code}"}, status=400)
+    except Exception as e:
+        return Response({'error': f"Failed to fetch DOI: {str(e)}"}, status=500)

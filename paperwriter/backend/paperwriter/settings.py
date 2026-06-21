@@ -29,6 +29,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -59,12 +60,29 @@ TEMPLATES = [
 WSGI_APPLICATION = 'paperwriter.wsgi.application'
 
 # Database
+import shutil
+import dj_database_url
+
+DB_PATH = BASE_DIR / 'db.sqlite3'
+if 'VERCEL' in os.environ:
+    tmp_db = Path('/tmp/db.sqlite3')
+    if not tmp_db.exists():
+        if DB_PATH.exists():
+            shutil.copy(DB_PATH, tmp_db)
+    DB_PATH = tmp_db
+
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'NAME': DB_PATH,
     }
 }
+
+if os.getenv('DATABASE_URL'):
+    DATABASES['default'] = dj_database_url.config(
+        conn_max_age=600,
+        ssl_require=True
+    )
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
@@ -89,17 +107,35 @@ USE_I18N = True
 USE_TZ = True
 
 # Static files (CSS, JavaScript, Images)
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
+if 'VERCEL' in os.environ:
+    STATIC_ROOT = Path('/tmp/staticfiles')
+else:
+    STATIC_ROOT = BASE_DIR / 'staticfiles'
+
 STATICFILES_DIRS = [
     BASE_DIR / "static",
 ]
 
 # Media files (uploaded images)
 MEDIA_URL = '/media/'
-MEDIA_ROOT = BASE_DIR / 'media'
+if 'VERCEL' in os.environ:
+    tmp_media = Path('/tmp/media')
+    if not tmp_media.exists():
+        tmp_media.mkdir(parents=True, exist_ok=True)
+        src_media = BASE_DIR / 'media'
+        if src_media.exists():
+            for item in src_media.glob('*'):
+                if item.is_file():
+                    shutil.copy(item, tmp_media)
+    MEDIA_ROOT = tmp_media
+else:
+    MEDIA_ROOT = BASE_DIR / 'media'
 
 # API Config
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 CORS_ALLOW_ALL_ORIGINS = True
+
+GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID', 'placeholder-client-id')
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

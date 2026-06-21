@@ -1,10 +1,35 @@
 from rest_framework import serializers
-from .models import Document, Section, Author, PaperImage, Reference
+from django.contrib.auth.models import User
+from .models import Document, Section, Author, PaperImage, Reference, PaperTable, Comment, UserProfile
 
 class ReferenceSerializer(serializers.ModelSerializer):
     class Meta:
         model = Reference
         fields = ['id', 'document', 'citation_key', 'description', 'bibtex', 'order', 'created_at']
+        read_only_fields = ['created_at']
+
+class UserProfileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UserProfile
+        fields = ['dpdp_consent_processing', 'dpdp_consent_communication', 'dpdp_consent_date']
+
+class UserSerializer(serializers.ModelSerializer):
+    profile = UserProfileSerializer(read_only=True)
+    
+    class Meta:
+        model = User
+        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'profile']
+
+class PaperTableSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PaperTable
+        fields = ['id', 'document', 'section', 'caption', 'label', 'style', 'content', 'order', 'created_at']
+        read_only_fields = ['created_at']
+
+class CommentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Comment
+        fields = ['id', 'document', 'section', 'author_name', 'text', 'quote', 'resolved', 'created_at']
         read_only_fields = ['created_at']
 
 class SectionSerializer(serializers.ModelSerializer):
@@ -43,10 +68,12 @@ class DocumentSerializer(serializers.ModelSerializer):
     authors = AuthorSerializer(many=True, read_only=True)
     images = PaperImageSerializer(many=True, read_only=True)
     references = ReferenceSerializer(many=True, read_only=True)
+    tables = PaperTableSerializer(many=True, read_only=True)
+    comments = CommentSerializer(many=True, read_only=True)
 
     class Meta:
         model = Document
-        fields = ['id', 'title', 'index_terms', 'created_at', 'updated_at', 'sections', 'authors', 'images', 'references']
+        fields = ['id', 'title', 'index_terms', 'created_at', 'updated_at', 'sections', 'authors', 'images', 'references', 'tables', 'comments']
 
     def get_sections(self, obj):
         # Return only top-level sections for the recursive tree

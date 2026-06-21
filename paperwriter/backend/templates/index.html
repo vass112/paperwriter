@@ -4,19 +4,38 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PaperWriter</title>
-    <link rel="stylesheet" href="/static/css/style.css?v=29">
+    <title>PaperWriter — Scholarly Workspace</title>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <script>
+        window.csrfToken = "{{ csrf_token }}";
+        window.GOOGLE_CLIENT_ID = "{{ google_client_id }}";
+        window.addEventListener('error', function(e) {
+            console.error("GLOBAL ERROR DETECTED:", e.message, "at", e.filename, ":", e.lineno, e.error);
+            var errDiv = document.createElement('div');
+            errDiv.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#ef4444;color:white;padding:12px;z-index:99999;font-family:monospace;font-size:12px;text-align:center;box-shadow:0 2px 10px rgba(0,0,0,0.2);';
+            errDiv.textContent = "Error: " + e.message + " (" + e.filename + ":" + e.lineno + ")";
+            document.body.appendChild(errDiv);
+        }, true);
+        window.addEventListener('unhandledrejection', function(e) {
+            console.error("UNHANDLED REJECTION DETECTED:", e.reason);
+            var errDiv = document.createElement('div');
+            errDiv.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#f59e0b;color:white;padding:12px;z-index:99999;font-family:monospace;font-size:12px;text-align:center;box-shadow:0 2px 10px rgba(0,0,0,0.2);';
+            errDiv.textContent = "Unhandled Rejection: " + e.reason;
+            document.body.appendChild(errDiv);
+        });
+    </script>
+    <meta name="description" content="PaperWriter: A premium scholarly workspace for authoring, formatting, and exporting IEEE-style research papers.">
+    <link rel="stylesheet" href="/static/css/style.css?v=48">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/latex.js/dist/latex.min.js"></script>
     <style>
         .ProseMirror {
             outline: none;
         }
-
         .ProseMirror p.is-empty::before {
-            color: #adb5bd;
+            color: #cbd5e1;
             content: attr(data-placeholder);
             float: left;
             height: 0;
@@ -26,80 +45,206 @@
 </head>
 
 <body>
+    {% if user.is_authenticated %}
     <div id="app">
-        <!-- Sidebar -->
-        <aside class="sidebar" id="sidebar">
-            <div class="sidebar-header">
-                <div class="logo">PaperWriter</div>
-                <button id="sidebar-toggle" class="icon-btn" title="Toggle Sidebar">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
-                </button>
+        <!-- ===== TOP HEADER BAR ===== -->
+        <header class="main-header" id="main-header">
+            <div class="header-left">
+                <div class="header-brand" style="cursor: pointer;" onclick="if(typeof loadDashboard === 'function') loadDashboard();" title="Return to Dashboard">
+                    <div class="brand-icon">P</div>
+                    <span class="brand-name">PaperWriter</span>
+                </div>
+                <div class="header-divider" id="header-divider"></div>
+                <div class="header-doc-info" id="header-doc-info">
+                    <input type="text" id="doc-title" class="header-doc-title" placeholder="Untitled Paper..." />
+                    <span class="header-autosave" id="save-status">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"></path></svg>
+                        Autosaved
+                    </span>
+                </div>
             </div>
-            <nav id="section-nav">
-                <!-- Sections populated by JS -->
-            </nav>
-            <div class="export-controls">
-                <button id="authors-btn" class="btn-secondary">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
-                    <span>Authors</span>
+            <div class="header-right">
+                <button class="header-menu-btn" id="sidebar-toggle" title="Toggle Sidebar">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
                 </button>
-                <button id="images-btn" class="btn-secondary">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
-                    <span>Images</span>
-                </button>
-                <button id="references-btn" class="btn-secondary">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
-                    <span>References</span>
-                </button>
-                <button id="export-btn" class="btn-primary">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-                    <span>Export PDF</span>
-                </button>
+                <div class="header-avatar" id="profile-avatar-btn" style="cursor: pointer; transition: transform 0.2s;" onclick="openProfileModal()" title="Profile & Settings">JD</div>
             </div>
-        </aside>
+        </header>
 
-        <!-- Sidebar-Editor Resizer -->
-        <div class="resizer" id="resizer-left"></div>
+        <!-- ===== MAIN BODY (sidebar + editor + preview) ===== -->
+        <div class="main-body" id="editor-view" style="display: none;">
 
-        <!-- Main Editor -->
-        <main class="editor-container">
-            <header class="top-bar">
-                <div style="flex: 1;">
-                    <input type="text" id="doc-title" class="doc-title-input" placeholder="Enter Paper Title...">
-                    <div class="index-terms-container">
-                        <label for="doc-index-terms">Index Terms:</label>
-                        <input type="text" id="doc-index-terms" class="transparent-input" placeholder="e.g. machine learning, radar, FMCW...">
+            <!-- ===== LEFT SIDEBAR ===== -->
+            <aside class="sidebar" id="sidebar">
+                <div class="sidebar-header">
+                    <!-- toggle is in the header now -->
+                </div>
+
+                <!-- Metadata block for Keywords -->
+                <div class="sidebar-metadata" style="padding: 12px 16px; border-bottom: 1px solid var(--border-light);">
+                    <div class="nav-section-label" style="margin-bottom: 6px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--brand-400);">Index Terms</div>
+                    <input type="text" id="doc-index-terms" class="modal-input" style="font-size: 12px; padding: 6px 10px; width: 100%; border: 1px solid var(--border); border-radius: var(--radius-sm); outline: none; background: transparent; color: var(--brand-800); box-sizing: border-box;" placeholder="e.g. machine learning...">
+                </div>
+
+                <nav id="section-nav">
+                    <!-- Sections populated by JS -->
+                </nav>
+
+                <!-- Library Section -->
+                <div class="sidebar-library">
+                    <div class="nav-section-label" style="margin-bottom: 12px;">Library</div>
+                    <div style="display: flex; flex-direction: column; gap: 2px;">
+                        <button id="authors-btn" class="btn-secondary" style="justify-content: flex-start; text-transform: none; letter-spacing: 0; font-weight: 500; font-size: 13px; padding: 6px 8px;">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+                            <span>Authors</span>
+                        </button>
+                        <button id="images-btn" class="btn-secondary" style="justify-content: flex-start; text-transform: none; letter-spacing: 0; font-weight: 500; font-size: 13px; padding: 6px 8px;">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                            <span>Figures</span>
+                        </button>
+                        <button id="references-btn" class="btn-secondary" style="justify-content: flex-start; text-transform: none; letter-spacing: 0; font-weight: 500; font-size: 13px; padding: 6px 8px;">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                            <span>Citations</span>
+                        </button>
+                        <button id="tables-btn" class="btn-secondary" style="justify-content: flex-start; text-transform: none; letter-spacing: 0; font-weight: 500; font-size: 13px; padding: 6px 8px;">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h18v18H3V3z M3 9h18 M3 15h18 M9 3v18 M15 3v18"></path></svg>
+                            <span>Tables</span>
+                        </button>
+                        <button id="sidebar-equation-btn" class="btn-secondary" style="justify-content: flex-start; text-transform: none; letter-spacing: 0; font-weight: 500; font-size: 13px; padding: 6px 8px;">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19l4-14h4l3 10 5-10h4"></path></svg>
+                            <span>Equations</span>
+                        </button>
                     </div>
                 </div>
-                <span class="status" id="save-status">Saved</span>
-            </header>
-            <div id="editor-scroll">
-                <div id="editor-content">
-                    <!-- TipTap instances per section will go here -->
+
+                <div class="export-controls">
+                    <button id="export-btn" class="btn-secondary" style="border-color: var(--brand-200);">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                        <span>Export Document</span>
+                    </button>
+                </div>
+            </aside>
+
+            <!-- Sidebar-Editor Resizer -->
+            <div class="resizer" id="resizer-left"></div>
+
+            <!-- ===== CENTRAL EDITOR ===== -->
+            <main class="editor-container">
+
+                <!-- Editor Content -->
+                <div id="editor-scroll">
+                    <div id="editor-content">
+                        <!-- TipTap instances per section will go here -->
+                    </div>
+                </div>
+            </main>
+
+            <!-- Editor-Right Resizer -->
+            <div class="resizer" id="resizer-right"></div>
+
+            <!-- ===== RIGHT PANEL (Preview) ===== -->
+            <aside class="right-panel" id="right-panel">
+                <!-- Preview Header -->
+                <div class="preview-header">
+                    <div class="preview-header-tabs" style="display: flex; gap: 16px; align-items: center;">
+                        <button class="preview-tab-btn active" id="tab-btn-preview" onclick="switchRightPanelTab('preview')" style="background: none; border: none; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--brand-900); cursor: pointer; border-bottom: 2px solid var(--brand-950); padding: 8px 0; outline: none;">Preview</button>
+                        <button class="preview-tab-btn" id="tab-btn-comments" onclick="switchRightPanelTab('comments')" style="background: none; border: none; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--brand-400); cursor: pointer; border-bottom: 2px solid transparent; padding: 8px 0; outline: none;">Comments (<span id="comments-count">0</span>)</button>
+                    </div>
+                    <div class="preview-header-right" id="preview-zoom-controls">
+                        <button class="preview-zoom-btn" title="Zoom In">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7"></path></svg>
+                        </button>
+                        <button class="preview-zoom-btn" title="Zoom Out">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM13 10H7"></path></svg>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Tab content for Preview -->
+                <div id="tab-preview" class="right-panel-tab-content active" style="flex: 1; display: flex; flex-direction: column; height: calc(100% - 40px); overflow: hidden;">
+                    <div class="preview-frame-container" style="flex: 1; height: 100%;">
+                        <iframe id="latex-preview"></iframe>
+                    </div>
+                    <!-- Preview Footer Stats -->
+                    <div class="preview-footer" id="preview-footer">
+                        <div class="preview-stats">
+                            <div class="preview-stat">
+                                <span class="preview-stat-label">Words:</span>
+                                <span class="preview-stat-value" id="word-count">0</span>
+                            </div>
+                            <div class="preview-stat">
+                                <span class="preview-stat-label">Sections:</span>
+                                <span class="preview-stat-value" id="section-count">0</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tab content for Comments -->
+                <div id="tab-comments" class="right-panel-tab-content" style="flex: 1; display: none; flex-direction: column; height: calc(100% - 40px); overflow-y: auto; padding: 20px; background: #f8fafc; border-top: 1px solid var(--border-light);">
+                    <div id="comments-list" style="display: flex; flex-direction: column; gap: 12px;">
+                        <!-- Comment cards populated by JS -->
+                    </div>
+                </div>
+            </aside>
+
+        </div><!-- /editor-view -->
+
+        <!-- ===== DASHBOARD VIEW ===== -->
+        <div class="dashboard-view" id="dashboard-view" style="display: none;">
+            <div class="dashboard-container">
+                <div class="dashboard-header">
+                    <h2>My Papers</h2>
+                    <div style="display: flex; gap: 12px; align-items: center;">
+                        <button class="btn-secondary" onclick="openPrivacyModal()" style="padding: 8px 16px; font-weight: 500;">
+                            Privacy Policy
+                        </button>
+                        <button class="btn-primary" onclick="createNewDocument()">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 6px;"><path d="M12 5v14M5 12h14"/></svg>
+                            New Paper
+                        </button>
+                    </div>
+                </div>
+                <div id="dashboard-grid" class="dashboard-grid">
+                    <!-- Cards injected here -->
                 </div>
             </div>
-        </main>
+        </div>
 
-        <!-- Editor-Right Resizer -->
-        <div class="resizer" id="resizer-right"></div>
+    </div><!-- /app -->
 
-        <!-- Preview Panel -->
-        <aside class="right-panel" id="right-panel">
-            <!-- Full Height Preview -->
-            <div id="tab-preview" style="flex: 1; display: flex; flex-direction: column; height: 100%; background: var(--panel-bg); overflow: hidden;">
-                <div class="preview-frame-container">
-                    <iframe id="latex-preview"></iframe>
-                </div>
+    <!-- ===== PRIVACY POLICY MODAL ===== -->
+    <div id="privacy-policy-modal" class="modal-overlay">
+        <div class="modal-content" style="max-width: 800px; max-height: 80vh; overflow-y: auto;">
+            <div class="modal-header">
+                <h3>Privacy Policy & DPDP Compliance</h3>
+                <span class="close-modal" onclick="closePrivacyModal()">&times;</span>
             </div>
-        </aside>
+            <div class="modal-body" style="padding: 24px; line-height: 1.6; color: var(--brand-700); font-size: 14px;">
+                <h4 style="margin-bottom: 12px; color: var(--brand-900); font-size: 16px;">1. Introduction</h4>
+                <p style="margin-bottom: 16px;">Welcome to PaperWriter. We respect your privacy and are committed to protecting your personal data in strict accordance with the Digital Personal Data Protection (DPDP) Act of India.</p>
+
+                <h4 style="margin-bottom: 12px; color: var(--brand-900); font-size: 16px;">2. Data Collection and Purpose</h4>
+                <p style="margin-bottom: 16px;">We collect only the minimum necessary data required to provide our scholarly formatting services. This includes basic account information (email address) and the documents you explicitly save to our cloud servers. We do not use your documents to train artificial intelligence models without your explicit consent.</p>
+
+                <h4 style="margin-bottom: 12px; color: var(--brand-900); font-size: 16px;">3. User Consent</h4>
+                <p style="margin-bottom: 16px;">By using our services, you provide explicit consent for the processing of your personal data solely for the purpose of document syncing, rendering, and management. You may withdraw this consent at any time through your Profile Settings.</p>
+
+                <h4 style="margin-bottom: 12px; color: var(--brand-900); font-size: 16px;">4. Right to be Forgotten</h4>
+                <p style="margin-bottom: 16px;">Under the DPDP Act, you have the absolute right to erasure. You can permanently delete your account and all associated documents instantaneously using the "Delete Account" feature in your Profile Settings.</p>
+                
+                <h4 style="margin-bottom: 12px; color: var(--brand-900); font-size: 16px;">5. Security Measures</h4>
+                <p style="margin-bottom: 16px;">We implement robust security measures to prevent unauthorized access, alteration, disclosure, or destruction of your personal information. However, no internet-based service can guarantee absolute security.</p>
+            </div>
+        </div>
     </div>
 
-    <!-- Authors Modal -->
+    <!-- ===== AUTHORS MODAL ===== -->
     <div id="authors-modal" class="modal-overlay">
         <div class="modal-content authors-modal-content">
             <div class="modal-header">
                 <h3>Manage Authors</h3>
-                <span class="close-modal" onclick="closeAuthorsModal()">×</span>
+                <span class="close-modal" onclick="closeAuthorsModal()">&times;</span>
             </div>
 
             <div class="modal-body-split">
@@ -133,21 +278,21 @@
                             <div class="modal-form-grid">
                                 <div class="modal-input-group">
                                     <label>City</label>
-                                    <input type="text" id="author-city" class="modal-input" placeholder="City">
+                                    <input type="text" id="author-city" class="modal-input" placeholder="e.g. New York">
                                 </div>
                                 <div class="modal-input-group">
                                     <label>Country</label>
-                                    <input type="text" id="author-country" class="modal-input" placeholder="Country">
+                                    <input type="text" id="author-country" class="modal-input" placeholder="e.g. USA">
                                 </div>
                             </div>
                             <div class="modal-input-group">
                                 <label>Email</label>
-                                <input type="email" id="author-email" class="modal-input" placeholder="email@example.com">
+                                <input type="email" id="author-email" class="modal-input" placeholder="e.g. email@example.com">
                             </div>
                             <div id="author-form-error" class="modal-error"></div>
                             <div class="modal-actions-footer">
-                                <button type="button" class="btn-secondary" onclick="resetAuthorForm()">Clear</button>
-                                <button type="submit" class="btn-primary" id="save-author-btn">Save Author</button>
+                                <button type="button" class="btn-secondary" onclick="resetAuthorForm()" style="width:auto; padding: 8px 16px;">Clear</button>
+                                <button type="submit" class="btn-primary" id="save-author-btn" style="width:auto; padding: 8px 16px;">Save Author</button>
                             </div>
                         </form>
                     </div>
@@ -156,21 +301,21 @@
         </div>
     </div>
 
-    <!-- Images Modal -->
+    <!-- ===== IMAGES MODAL ===== -->
     <div id="images-modal" class="modal-overlay">
         <div class="modal-content images-modal-content">
             <div class="modal-header">
                 <h3>Manage Images</h3>
-                <span class="close-modal" onclick="closeImagesModal()">×</span>
+                <span class="close-modal" onclick="closeImagesModal()">&times;</span>
             </div>
 
             <div class="modal-body-split">
                 <!-- Left: Upload + Gallery -->
                 <div class="modal-sidebar wider">
-                    <div id="img-drop-zone" class="modal-drop-zone">
-                        <div class="drop-icon">📁</div>
-                        <p class="drop-text">Drop image here</p>
-                        <p class="drop-subtext">or click to browse</p>
+                    <div id="img-drop-zone" class="modal-drop-zone" style="padding: 16px; margin-bottom: 12px;">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--brand-600); margin-bottom: 6px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                        <p class="drop-text" style="font-size: 12px; margin-bottom: 2px;">Drop image here</p>
+                        <p class="drop-subtext" style="font-size: 11px;">or click to browse</p>
                         <input type="file" id="img-file-input" accept="image/*" style="display:none">
                     </div>
                     <div class="modal-sidebar-header mini">
@@ -183,7 +328,7 @@
                 <div class="modal-main">
                     <div class="modal-form-container scroll-minimal">
                         <div id="img-preview-container" class="modal-img-preview">
-                            <span>Select an image to preview & edit</span>
+                            <span>Select an image to preview &amp; edit</span>
                         </div>
                         <input type="hidden" id="img-selected-id">
                         <div class="modal-input-group">
@@ -206,8 +351,7 @@
                         </div>
                         <div id="img-form-error" class="modal-error"></div>
                         <div class="modal-actions-footer">
-                            <button id="img-delete-btn" class="btn-danger" onclick="deleteImage()" style="display: none;">Delete</button>
-                            <button id="img-save-btn" class="btn-primary" onclick="saveImageMeta()" style="display: none;">Save Changes</button>
+                            <button id="img-save-btn" class="btn-primary" onclick="saveImageMeta()" style="display: none; width:auto; padding: 8px 16px;">Save Changes</button>
                         </div>
                     </div>
                 </div>
@@ -215,12 +359,12 @@
         </div>
     </div>
 
-    <!-- References Modal -->
+    <!-- ===== REFERENCES MODAL ===== -->
     <div id="references-modal" class="modal-overlay">
         <div class="modal-content references-modal-content">
             <div class="modal-header">
                 <h3>Manage References</h3>
-                <span class="close-modal" onclick="closeReferencesModal()">×</span>
+                <span class="close-modal" onclick="closeReferencesModal()">&times;</span>
             </div>
 
             <div class="modal-body-split">
@@ -236,12 +380,30 @@
                 <!-- Right: Form -->
                 <div class="modal-main">
                     <div class="modal-form-container scroll-minimal">
-                        <h4 id="reference-form-title">Add New BibTeX Reference</h4>
-                        <div class="modal-info-box">
-                            Paste your raw BibTeX entry below. We will automatically extract the citation key.
+                        <h4 id="reference-form-title">Add New Reference</h4>
+                        <div class="modal-info-box" style="margin-bottom: 16px;">
+                            Choose whether to fetch citation data using a DOI or paste the raw BibTeX entry directly.
                         </div>
                         <form id="reference-form" onsubmit="event.preventDefault(); submitReferenceForm();">
                             <input type="hidden" id="ref-id">
+                            
+                            <!-- Segmented Toggle -->
+                            <div class="ref-input-toggle" style="display: flex; gap: 4px; margin-bottom: 16px; background: #f1f5f9; padding: 4px; border-radius: var(--radius-sm);">
+                                <button type="button" id="ref-toggle-doi" class="ref-toggle-btn active" onclick="switchRefInputMode('doi')" style="flex: 1; text-align: center; font-size: 12px; font-weight: 600; padding: 8px; border: none; background: #ffffff; border-radius: var(--radius-xs); cursor: pointer; color: var(--brand-900); box-shadow: 0 1px 2px rgba(0,0,0,0.05); transition: all 0.2s;">Fetch by DOI</button>
+                                <button type="button" id="ref-toggle-bibtex" class="ref-toggle-btn" onclick="switchRefInputMode('bibtex')" style="flex: 1; text-align: center; font-size: 12px; font-weight: 600; padding: 8px; border: none; background: transparent; border-radius: var(--radius-xs); cursor: pointer; color: var(--brand-500); transition: all 0.2s;">Paste BibTeX</button>
+                            </div>
+
+                            <!-- DOI Input Section -->
+                            <div id="doi-input-section" class="ref-input-section" style="margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px dashed var(--brand-200);">
+                                <div class="doi-fetch-container" style="display: flex; gap: 8px; align-items: flex-end;">
+                                    <div class="modal-input-group" style="flex: 1; margin-bottom: 0;">
+                                        <label>Autofill by DOI</label>
+                                        <input type="text" id="ref-doi-input" class="modal-input" placeholder="e.g. 10.1109/CVPR.2016.90" style="margin-bottom: 0;">
+                                    </div>
+                                    <button type="button" id="ref-doi-fetch-btn" class="btn-primary sm" onclick="fetchDoiData()" style="height: 36px; padding: 0 16px; text-transform: none; font-size: 12px; font-weight: 500; letter-spacing: 0; width: auto; flex-shrink: 0;">Fetch Citation</button>
+                                </div>
+                            </div>
+
                             <div class="modal-input-group">
                                 <label>Description (Optional)</label>
                                 <input type="text" id="ref-description" class="modal-input" placeholder="e.g. Smith et al. 2023 Study">
@@ -250,15 +412,18 @@
                                 <label>Citation Key</label>
                                 <input type="text" id="ref-key" class="modal-input mono" placeholder="e.g. smith2023" required>
                             </div>
-                            <div class="modal-input-group expand">
-                                <label>Raw BibTeX *</label>
-                                <textarea id="ref-bibtex" class="modal-textarea mono" required placeholder="@article{...}" oninput="autoExtractBibTeXKey(this.value)"></textarea>
+
+                            <!-- BibTeX Textarea Section -->
+                            <div id="bibtex-input-section" class="ref-input-section" style="display: none; margin-bottom: 16px;">
+                                <div class="modal-input-group expand">
+                                    <label>Raw BibTeX *</label>
+                                    <textarea id="ref-bibtex" class="modal-textarea mono" required placeholder="e.g. @article{...}" oninput="autoExtractBibTeXKey(this.value)"></textarea>
+                                </div>
                             </div>
                             <div id="ref-form-error" class="modal-error"></div>
                             <div class="modal-actions-footer">
-                                <button type="button" id="ref-delete-btn" class="btn-danger" onclick="deleteReference()" style="display: none;">Delete</button>
-                                <button type="button" class="btn-secondary" onclick="closeReferencesModal()">Cancel</button>
-                                <button type="submit" class="btn-primary">Save Reference</button>
+                                <button type="button" class="btn-secondary" onclick="closeReferencesModal()" style="width:auto; padding: 8px 16px;">Cancel</button>
+                                <button type="submit" class="btn-primary" style="width:auto; padding: 8px 16px;">Save Reference</button>
                             </div>
                         </form>
                     </div>
@@ -267,8 +432,407 @@
         </div>
     </div>
 
+    </div>
+
+    <!-- ===== TABLES MODAL ===== -->
+    <div id="tables-modal" class="modal-overlay">
+        <div class="modal-content tables-modal-content" style="max-width: 900px; width: 90%;">
+            <div class="modal-header">
+                <h3>Manage Tables</h3>
+                <span class="close-modal" onclick="closeTablesModal()">&times;</span>
+            </div>
+
+            <div class="modal-body-split">
+                <!-- Left: List -->
+                <div class="modal-sidebar">
+                    <div class="modal-sidebar-header">
+                        <h4>Tables List</h4>
+                        <button class="btn-primary sm" onclick="showAddTableForm()">+ New</button>
+                    </div>
+                    <div id="tables-list" class="modal-list scroll-minimal"></div>
+                </div>
+
+                <!-- Right: Form & Grid Editor -->
+                <div class="modal-main">
+                    <div class="modal-form-container scroll-minimal">
+                        <h4 id="table-form-title">Add New Table</h4>
+                        <form id="table-form" onsubmit="event.preventDefault(); submitTableForm();">
+                            <input type="hidden" id="table-id">
+                            <div class="table-meta-card">
+                                <div class="modal-input-group" style="margin-bottom: 12px;">
+                                    <label>Caption *</label>
+                                    <input type="text" id="table-caption" class="modal-input" required placeholder="e.g. System Performance Parameters">
+                                </div>
+                                <div class="modal-form-grid-three" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 4px;">
+                                    <div class="modal-input-group" style="margin-bottom: 0;">
+                                        <label>LaTeX Label *</label>
+                                        <input type="text" id="table-label" class="modal-input mono" required placeholder="e.g. tab:parameters">
+                                    </div>
+                                    <div class="modal-input-group" style="margin-bottom: 0;">
+                                        <label>Place After Section</label>
+                                        <select id="table-section" class="modal-select">
+                                            <option value="">— End of document —</option>
+                                        </select>
+                                    </div>
+                                    <div class="modal-input-group" style="margin-bottom: 0;">
+                                        <label>Table Style</label>
+                                        <select id="table-style" class="modal-select">
+                                            <option value="standard">Standard (Grid)</option>
+                                            <option value="booktabs">Three-line (Booktabs)</option>
+                                            <option value="no_vertical">No Vertical Lines</option>
+                                            <option value="minimal">Minimal</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Grid Editor -->
+                            <div class="modal-input-group">
+                                <label style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                    <span>Table Grid Editor</span>
+                                    <div style="display: flex; gap: 4px;">
+                                        <button type="button" class="btn-secondary sm" onclick="addGridRow()" style="padding: 2px 6px; font-size: 10px; height: auto; text-transform: none; width: auto;">+ Row</button>
+                                        <button type="button" class="btn-secondary sm" onclick="removeGridRow()" style="padding: 2px 6px; font-size: 10px; height: auto; text-transform: none; color: #ef4444; border-color: rgba(239, 68, 68, 0.2); width: auto;">- Row</button>
+                                        <button type="button" class="btn-secondary sm" onclick="addGridCol()" style="padding: 2px 6px; font-size: 10px; height: auto; text-transform: none; width: auto;">+ Col</button>
+                                        <button type="button" class="btn-secondary sm" onclick="removeGridCol()" style="padding: 2px 6px; font-size: 10px; height: auto; text-transform: none; color: #ef4444; border-color: rgba(239, 68, 68, 0.2); width: auto;">- Col</button>
+                                    </div>
+                                </label>
+                                <div id="table-grid-container" class="scroll-minimal" style="width: 100%; overflow-x: auto; border: 1px solid var(--brand-200); border-radius: var(--radius-sm); background: #fafafa; padding: 8px;">
+                                    <!-- Grid editor here -->
+                                </div>
+                            </div>
+                            
+                            <div id="table-form-error" class="modal-error"></div>
+                            <div class="modal-actions-footer" style="margin-top: 16px;">
+                                <button type="button" class="btn-secondary" onclick="closeTablesModal()" style="width:auto; padding: 8px 16px;">Cancel</button>
+                                <button type="submit" class="btn-primary" style="width:auto; padding: 8px 16px;">Save Table</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== EQUATION HELPER MODAL ===== -->
+    <div id="equation-modal" class="modal-overlay">
+        <div class="modal-content equation-modal-content" style="max-width: 650px; width: 90%;">
+            <div class="modal-header">
+                <h3>AI Equation Helper</h3>
+                <span class="close-modal" onclick="closeEquationModal()">&times;</span>
+            </div>
+            
+            <div class="modal-tabs" style="display: flex; border-bottom: 1px solid var(--brand-200); padding: 0 16px; background: #fafafa; gap: 8px;">
+                <button type="button" class="modal-tab-btn active" id="eq-tab-btn-text" onclick="switchEquationTab('text')" style="padding: 12px 16px; font-size: 12px; font-weight: 600; border: none; background: transparent; cursor: pointer; color: var(--brand-500); border-bottom: 2px solid transparent; outline: none; width: auto;">AI Describe</button>
+                <button type="button" class="modal-tab-btn" id="eq-tab-btn-vision" onclick="switchEquationTab('vision')" style="padding: 12px 16px; font-size: 12px; font-weight: 600; border: none; background: transparent; cursor: pointer; color: var(--brand-500); border-bottom: 2px solid transparent; outline: none; width: auto;">AI Scan Image</button>
+                <button type="button" class="modal-tab-btn" id="eq-tab-btn-presets" onclick="switchEquationTab('presets')" style="padding: 12px 16px; font-size: 12px; font-weight: 600; border: none; background: transparent; cursor: pointer; color: var(--brand-500); border-bottom: 2px solid transparent; outline: none; width: auto;">Presets</button>
+            </div>
+            
+            <div class="modal-body scroll-minimal" style="padding: 24px; max-height: 480px; overflow-y: auto;">
+                <!-- Tab A: Text to Math -->
+                <div id="eq-tab-content-text" class="eq-tab-content">
+                    <p style="font-size:12px; color:var(--brand-500); margin-bottom:12px;">Describe your equation in plain English. We will convert it into a standard LaTeX equation.</p>
+                    <div class="modal-input-group">
+                        <textarea id="eq-description" class="modal-textarea" placeholder="e.g. integral of x squared from 0 to infinity equals half" style="height: 80px; min-height: 80px; width: 100%; border: 1px solid var(--brand-200); border-radius: var(--radius-sm); padding: 8px; font-family: inherit; font-size: 13px; outline: none;"></textarea>
+                    </div>
+                    <button type="button" class="btn-primary" onclick="processTextToMath()" style="width: auto; margin-top: 8px;">Generate LaTeX</button>
+                </div>
+                
+                <!-- Tab B: Image Scanner -->
+                <div id="eq-tab-content-vision" class="eq-tab-content" style="display: none;">
+                    <p style="font-size:12px; color:var(--brand-500); margin-bottom:12px;">Upload a screenshot or photo of a handwritten or typed math formula. We will convert it to LaTeX.</p>
+                    <div id="eq-drop-zone" class="modal-drop-zone" style="border: 2px dashed var(--brand-200); border-radius: var(--radius-md); padding: 20px 16px; text-align: center; background: #fafafa; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--brand-600);"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+                        <p class="drop-text" style="font-size: 12px; font-weight: 500; color: var(--brand-700); margin: 0;">Click to browse or drop an equation image here</p>
+                        <input type="file" id="eq-file-input" accept="image/*" style="display: none;">
+                    </div>
+                </div>
+                
+                <!-- Tab C: Presets -->
+                <div id="eq-tab-content-presets" class="eq-tab-content" style="display: none;">
+                    <p style="font-size:12px; color:var(--brand-500); margin-bottom:12px;">Click a preset to insert a common equation template.</p>
+                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;" id="eq-presets-grid">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+                
+                <!-- Live LaTeX & Math Preview Area -->
+                <div id="eq-preview-area" style="margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--brand-200); display: none;">
+                    <div class="modal-input-group">
+                        <label>LaTeX Equation Syntax</label>
+                        <input type="text" id="eq-latex-output" class="modal-input mono" style="font-size: 13px;">
+                    </div>
+                    <div class="modal-input-group">
+                        <label>Equation Label</label>
+                        <input type="text" id="eq-label" class="modal-input mono" placeholder="e.g. eq:quadratic" style="font-size: 13px;">
+                    </div>
+                    <div class="modal-input-group">
+                        <label>Visual Equation Preview</label>
+                        <div id="eq-math-render" style="background: #fafafa; border: 1px solid var(--brand-200); border-radius: var(--radius-sm); padding: 20px; text-align: center; min-height: 60px; display: flex; align-items: center; justify-content: center; overflow-x: auto; font-size: 1.25rem;">
+                            <!-- KaTeX rendering here -->
+                        </div>
+                    </div>
+                    
+                    <div class="modal-actions-footer" style="margin-top: 20px; padding-top: 0; display: flex; justify-content: flex-end; gap: 8px;">
+                        <button type="button" class="btn-secondary" onclick="closeEquationModal()" style="width:auto; padding: 8px 16px;">Cancel</button>
+                        <button type="button" class="btn-primary" onclick="insertEquationIntoDoc()" style="width:auto; padding: 8px 16px;">Insert into Document</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== UNIFIED FLOATING CITE/REF MENU ===== -->
+    <div id="floating-cite-trigger" class="floating-cite-trigger" style="display: none; position: absolute; z-index: 1000;">
+        <button onclick="openFloatingCiteMenu(event)">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"></path></svg>
+            Reference
+        </button>
+    </div>
+
+    <div id="floating-cite-menu" class="floating-cite-menu" style="display: none; position: absolute; z-index: 1001;">
+        <div class="ref-menu-tabs" style="display: flex; background: #f1f5f9; border-bottom: 1px solid var(--brand-200); padding: 4px; gap: 2px; border-top-left-radius: 6px; border-top-right-radius: 6px; overflow-x: auto;">
+            <button class="ref-menu-tab active" onclick="switchRefMenuTab('cite', event)" style="background:none; border:none; padding:4px 8px; font-size:10px; font-weight:700; cursor:pointer; color:var(--brand-600); border-radius:4px; outline:none; white-space:nowrap; width:auto; flex-shrink:0;">Cite</button>
+            <button class="ref-menu-tab" onclick="switchRefMenuTab('fig', event)" style="background:none; border:none; padding:4px 8px; font-size:10px; font-weight:700; cursor:pointer; color:var(--brand-600); border-radius:4px; outline:none; white-space:nowrap; width:auto; flex-shrink:0;">Figure</button>
+            <button class="ref-menu-tab" onclick="switchRefMenuTab('tab', event)" style="background:none; border:none; padding:4px 8px; font-size:10px; font-weight:700; cursor:pointer; color:var(--brand-600); border-radius:4px; outline:none; white-space:nowrap; width:auto; flex-shrink:0;">Table</button>
+            <button class="ref-menu-tab" onclick="switchRefMenuTab('eq', event)" style="background:none; border:none; padding:4px 8px; font-size:10px; font-weight:700; cursor:pointer; color:var(--brand-600); border-radius:4px; outline:none; white-space:nowrap; width:auto; flex-shrink:0;">Eq</button>
+            <button class="ref-menu-tab" onclick="switchRefMenuTab('fn', event)" style="background:none; border:none; padding:4px 8px; font-size:10px; font-weight:700; cursor:pointer; color:var(--brand-600); border-radius:4px; outline:none; white-space:nowrap; width:auto; flex-shrink:0;">Footnote</button>
+            <button class="ref-menu-tab" onclick="switchRefMenuTab('comment', event)" style="background:none; border:none; padding:4px 8px; font-size:10px; font-weight:700; cursor:pointer; color: #b45309; border-radius:4px; outline:none; white-space:nowrap; width:auto; flex-shrink:0;">Comment</button>
+        </div>
+        <div class="ref-menu-list scroll-minimal" style="max-height: 180px; overflow-y: auto; padding: 4px; display: flex; flex-direction: column; gap: 2px;">
+            <!-- Populated dynamically -->
+        </div>
+    </div>
+
+    <!-- ===== CUSTOM CONFIRM MODAL ===== -->
+    <div id="confirm-modal" class="modal-overlay" style="z-index: 2000;">
+        <div class="modal-content confirm-modal-content">
+            <div class="confirm-card-body">
+                <div id="confirm-icon-box" class="confirm-icon-container">
+                    <svg class="confirm-warning-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                    </svg>
+                </div>
+                <h3 id="confirm-title">Confirm Action</h3>
+                <p id="confirm-message"></p>
+            </div>
+            <div class="confirm-card-footer">
+                <button type="button" id="confirm-cancel-btn" class="btn-confirm-secondary">Cancel</button>
+                <button type="button" id="confirm-ok-btn" class="btn-confirm-danger">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== CUSTOM PROMPT MODAL ===== -->
+    <div id="prompt-modal" class="modal-overlay" style="z-index: 2000;">
+        <div class="modal-content confirm-modal-content">
+            <div class="confirm-card-body" style="align-items: flex-start; text-align: left;">
+                <h3 id="prompt-title" style="margin-bottom: 8px;">Create Section</h3>
+                <div class="modal-input-group" style="width: 100%; margin-bottom: 0;">
+                    <label id="prompt-label" style="font-size: 11px; margin-bottom: 6px; display: block; font-weight: 600; color: var(--brand-500);">Section Title</label>
+                    <input type="text" id="prompt-input" class="modal-input" style="width: 100%; margin-bottom: 0; box-sizing: border-box;" placeholder="e.g. Methodology">
+                </div>
+            </div>
+            <div class="confirm-card-footer">
+                <button type="button" id="prompt-cancel-btn" class="btn-confirm-secondary">Cancel</button>
+                <button type="button" id="prompt-ok-btn" class="btn-confirm-primary">Create</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== PROFILE MODAL ===== -->
+    <div id="profile-modal" class="modal-overlay">
+        <div class="modal-content confirm-modal-content" style="width: 480px; padding: 0;">
+            <div class="modal-header" style="border-bottom: none; padding-bottom: 0; width: 100%;">
+                <h3>Profile & Settings</h3>
+                <span class="close-modal" onclick="closeProfileModal()">&times;</span>
+            </div>
+            <div class="confirm-card-body" style="padding: 24px; width: 100%; align-items: flex-start; text-align: left;">
+                <div class="profile-info">
+                    <div class="header-avatar profile-avatar-lg" id="modal-avatar">JD</div>
+                    <div class="profile-text-block">
+                        <h4 id="modal-user-name">User Name</h4>
+                        <p id="modal-user-email">email@example.com</p>
+                    </div>
+                </div>
+
+                <div class="dpdp-section">
+                    <h4>Privacy & Data (DPDP)</h4>
+                    <p class="dpdp-desc">
+                        In compliance with the Indian Digital Personal Data Protection (DPDP) Act, your explicit consent is recorded. You have the right to erase your data.
+                    </p>
+                    
+                    <label class="custom-checkbox-wrapper">
+                        <input type="checkbox" id="dpdp-processing-check" onchange="saveProfileSettings()">
+                        <span class="checkmark"></span>
+                        <span class="checkbox-label">I consent to the storage and processing of my documents and profile data.</span>
+                    </label>
+                    
+                    <label class="custom-checkbox-wrapper">
+                        <input type="checkbox" id="dpdp-comm-check" onchange="saveProfileSettings()">
+                        <span class="checkmark"></span>
+                        <span class="checkbox-label">I consent to receiving email communications.</span>
+                    </label>
+                </div>
+            </div>
+            <div class="confirm-card-footer" style="margin-top: 0; padding: 0 24px 24px 24px;">
+                <button class="btn-confirm-danger" onclick="promptAccountDeletion()">Erase My Data</button>
+                <button class="btn-confirm-secondary" onclick="logoutUser()">Sign Out</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== MANDATORY CONSENT MODAL ===== -->
+    <div id="mandatory-consent-modal" class="modal-overlay" style="background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(12px);">
+        <div class="modal-content confirm-modal-content" style="width: 520px; padding: 0;">
+            <div class="modal-header" style="background: var(--brand-50); border-bottom: 1px solid var(--border-light); width: 100%;">
+                <h3>Welcome to PaperWriter</h3>
+            </div>
+            <div class="confirm-card-body" style="padding: 32px 32px 24px 32px; width: 100%; text-align: left; align-items: flex-start;">
+                <p style="font-size: 14px; color: var(--brand-600); margin-bottom: 24px; line-height: 1.6;">
+                    Before you can use the workspace, please review our privacy policy. In compliance with the Digital Personal Data Protection (DPDP) Act, we require your explicit consent to store and process your documents.
+                </p>
+                <div class="dpdp-section" style="width: 100%; margin-bottom: 0;">
+                    <label class="custom-checkbox-wrapper">
+                        <input type="checkbox" id="mandatory-dpdp-check">
+                        <span class="checkmark"></span>
+                        <span class="checkbox-label" style="font-size: 13px; font-weight: 500;">I have read and consent to the privacy policy regarding the processing of my personal data.</span>
+                    </label>
+                </div>
+            </div>
+            <div class="confirm-card-footer" style="padding: 0 32px 32px 32px; margin-top: 0; justify-content: flex-end;">
+                <button class="btn-confirm-secondary" style="flex: none;" onclick="logoutUser()">Decline & Exit</button>
+                <button class="btn-confirm-primary" style="flex: none;" onclick="acceptMandatoryConsent()">Accept & Continue</button>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="landing-page-container">
+        <!-- Navigation -->
+        <nav class="landing-nav">
+            <div class="header-brand">
+                <div class="brand-icon">P</div>
+                <span class="brand-name">PaperWriter</span>
+            </div>
+            <div class="landing-nav-links">
+                <a href="#features">Features</a>
+                <a href="#privacy">Privacy</a>
+            </div>
+        </nav>
+
+        <!-- Hero Section -->
+        <section class="landing-hero">
+            <div class="hero-content">
+                <h1 class="hero-title">The Scholar's Workspace</h1>
+                <p class="hero-subtitle">Draft, format, and export IEEE research papers with automated BibTeX management and full DPDP-compliant privacy controls.</p>
+            </div>
+            
+            <!-- Embedded Login Card -->
+            <div class="login-card" style="margin: 48px auto 0 auto; position: relative; z-index: 10;">
+                <div class="login-header" style="margin-bottom: 24px;">
+                    <h2 style="font-size: 20px;">Get Started</h2>
+                    <p>Sign in to sync your documents securely</p>
+                </div>
+                <div class="login-body" style="margin-bottom: 0;">
+                    <div class="google-btn-container">
+                        <div id="g_id_onload"
+                             data-client_id="{{ google_client_id }}"
+                             data-context="signin"
+                             data-ux_mode="popup"
+                             data-callback="handleCredentialResponse"
+                             data-auto_prompt="false">
+                        </div>
+                        <div class="g_id_signin"
+                             data-type="standard"
+                             data-shape="pill"
+                             data-theme="outline"
+                             data-text="signin_with"
+                             data-size="large"
+                             data-logo_alignment="left">
+                        </div>
+                    </div>
+                </div>
+                {% if debug %}
+                <div class="login-footer" style="margin-top: 24px; padding-top: 16px;">
+                    <button class="btn-secondary" onclick="devBypassLogin()" style="width: auto; padding: 10px 20px; font-weight: 600; border-color: var(--brand-300);">[DEV] Auto-Login as Test User</button>
+                    <script>
+                        window.devBypassLogin = async function() {
+                            try {
+                                let token = '';
+                                const cookies = document.cookie.split(';');
+                                for (let c of cookies) {
+                                    const [k, v] = c.trim().split('=');
+                                    if (k === 'csrftoken') token = decodeURIComponent(v);
+                                }
+                                const res = await fetch('/api/auth/dev-login/', {
+                                    method: 'POST',
+                                    headers: { 'X-CSRFToken': token }
+                                });
+                                if (res.ok) window.location.reload();
+                                else alert("Dev login failed. Is DEBUG=True?");
+                            } catch(e) { console.error(e); }
+                        };
+                    </script>
+                </div>
+                {% endif %}
+            </div>
+        </section>
+
+        <!-- Bento Grid Features Section -->
+        <section id="features" class="landing-features">
+            <div class="bento-grid">
+                <!-- Feature 1: Folder Management -->
+                <div class="bento-card col-span-2">
+                    <div class="bento-content">
+                        <h3>Organized Folder Management</h3>
+                        <p>Keep your research neatly structured with an intuitive dashboard. Easily manage drafts, track index terms, and jump back into writing instantly.</p>
+                    </div>
+                    <div class="bento-visual">
+                        <div class="document-card" style="pointer-events: none; margin: 0 auto; width: 80%; text-align: left; transform: translateY(24px);">
+                            <div>
+                                <h3 class="doc-card-title">A Study on Neural Networks</h3>
+                                <div class="doc-card-meta">machine learning, computer vision</div>
+                            </div>
+                            <div class="doc-card-footer">
+                                <span class="doc-card-date">Last modified: Just now</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Feature 2: IEEE Formatting -->
+                <div class="bento-card">
+                    <div class="bento-content">
+                        <h3>IEEE Formatting</h3>
+                        <p>Real-time LaTeX compilation. Focus purely on your research content, and we'll handle the strict two-column typesetting automatically.</p>
+                    </div>
+                </div>
+
+                <!-- Feature 3: DPDP Privacy Policy -->
+                <div id="privacy" class="bento-card col-span-3 privacy-bento">
+                    <div class="bento-content" style="text-align: center; max-width: 600px; margin: 0 auto;">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--brand-500); margin-bottom: 16px;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+                        <h3>Strict DPDP Compliance</h3>
+                        <p style="margin-bottom: 16px;">We adhere strictly to the Digital Personal Data Protection Act of India.</p>
+                        <ul style="text-align: left; font-size: 14px; color: var(--brand-600); line-height: 1.6; padding-left: 20px;">
+                            <li style="margin-bottom: 8px;">Explicit consent required for any data processing.</li>
+                            <li style="margin-bottom: 8px;">Your documents are strictly private and never used for AI training without explicit consent.</li>
+                            <li>"Right to be Forgotten" - one-click complete account and data deletion.</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </section>
+        
+        <!-- Footer -->
+        <footer class="landing-footer">
+            <p>&copy; 2026 PaperWriter. All rights reserved.</p>
+        </footer>
+    </div>
+    {% endif %}
+
     <!-- Scripts -->
-    <script type="module" src="/static/js/app.js?v=32"></script>
+    <script type="module" src="/static/js/app.js?v=48"></script>
 </body>
 
 </html>

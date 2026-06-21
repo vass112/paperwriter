@@ -20,9 +20,6 @@ let currentRefMenuTab = 'cite';
 let selectedTextRange = null;
 let activeEditorIdForRef = null;
 
-// User Profile State
-let userProfile = null;
-
 // CSRF helper for Django
 function getCsrfToken() {
     if (window.csrfToken) return window.csrfToken;
@@ -34,125 +31,6 @@ function getCsrfToken() {
     }
     return '';
 }
-
-// Custom non-blocking async confirmation dialog to replace native window.confirm()
-window.confirmDelete = function (message, confirmText = 'Delete') {
-    return new Promise((resolve) => {
-        const modal = document.getElementById('confirm-modal');
-        const msgEl = document.getElementById('confirm-message');
-        const okBtn = document.getElementById('confirm-ok-btn');
-        const cancelBtn = document.getElementById('confirm-cancel-btn');
-
-        if (!modal || !msgEl || !okBtn || !cancelBtn) {
-            // Fallback to native confirm if elements are missing
-            resolve(window.confirm(message));
-            return;
-        }
-
-        const titleEl = document.getElementById('confirm-title');
-        if (titleEl) {
-            if (confirmText === 'Resolve') {
-                titleEl.textContent = 'Resolve Comment?';
-            } else if (confirmText === 'Delete') {
-                titleEl.textContent = 'Confirm Delete?';
-            } else {
-                titleEl.textContent = 'Confirm Action?';
-            }
-        }
-
-        const iconBox = document.getElementById('confirm-icon-box');
-        if (iconBox) {
-            if (confirmText === 'Resolve' || confirmText === 'Yes') {
-                iconBox.className = 'confirm-icon-container primary-accent';
-                iconBox.innerHTML = `
-                    <svg class="confirm-warning-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                    </svg>
-                `;
-            } else {
-                iconBox.className = 'confirm-icon-container';
-                iconBox.innerHTML = `
-                    <svg class="confirm-warning-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
-                    </svg>
-                `;
-            }
-        }
-
-        msgEl.textContent = message;
-        okBtn.textContent = confirmText;
-        if (confirmText === 'Resolve' || confirmText === 'Yes') {
-            okBtn.className = 'btn-confirm-primary';
-        } else {
-            okBtn.className = 'btn-confirm-danger';
-        }
-
-        modal.classList.add('active');
-
-        const cleanup = (value) => {
-            modal.classList.remove('active');
-            okBtn.onclick = null;
-            cancelBtn.onclick = null;
-            resolve(value);
-        };
-
-        okBtn.onclick = () => cleanup(true);
-        cancelBtn.onclick = () => cleanup(false);
-    });
-};
-
-// Custom non-blocking async prompt input dialog to replace native window.prompt()
-window.customPrompt = function (title, labelText = 'Title', placeholder = '', confirmText = 'Create') {
-    return new Promise((resolve) => {
-        const modal = document.getElementById('prompt-modal');
-        const titleEl = document.getElementById('prompt-title');
-        const labelEl = document.getElementById('prompt-label');
-        const inputEl = document.getElementById('prompt-input');
-        const okBtn = document.getElementById('prompt-ok-btn');
-        const cancelBtn = document.getElementById('prompt-cancel-btn');
-
-        if (!modal || !inputEl || !okBtn || !cancelBtn) {
-            // Fallback to native prompt if elements are missing
-            resolve(window.prompt(title));
-            return;
-        }
-
-        if (titleEl) titleEl.textContent = title;
-        if (labelEl) labelEl.textContent = labelText;
-        inputEl.value = '';
-        inputEl.placeholder = placeholder;
-        okBtn.textContent = confirmText;
-
-        modal.classList.add('active');
-        
-        // Auto-focus input
-        setTimeout(() => inputEl.focus(), 100);
-
-        const cleanup = (value) => {
-            modal.classList.remove('active');
-            okBtn.onclick = null;
-            cancelBtn.onclick = null;
-            inputEl.onkeydown = null;
-            resolve(value);
-        };
-
-        okBtn.onclick = () => {
-            const val = inputEl.value.trim();
-            if (val) cleanup(val);
-        };
-
-        cancelBtn.onclick = () => cleanup(null);
-
-        inputEl.onkeydown = (e) => {
-            if (e.key === 'Enter') {
-                const val = inputEl.value.trim();
-                if (val) cleanup(val);
-            } else if (e.key === 'Escape') {
-                cleanup(null);
-            }
-        };
-    });
-};
 
 // References State - declared at top to avoid Temporal Dead Zone errors
 let referencesList = [];
@@ -286,9 +164,6 @@ async function initApp() {
     const tablesBtn = document.getElementById('tables-btn');
     if (tablesBtn) tablesBtn.onclick = () => openTablesModal();
 
-    const sidebarEquationBtn = document.getElementById('sidebar-equation-btn');
-    if (sidebarEquationBtn) sidebarEquationBtn.onclick = () => openEquationModal();
-
     const tbEquation = document.getElementById('tb-equation');
     if (tbEquation) tbEquation.onclick = () => openEquationModal();
     
@@ -310,23 +185,15 @@ async function initApp() {
     });
 
     try {
-        const profileResp = await fetch('/api/auth/profile/');
-        if (profileResp.ok) {
-            userProfile = await profileResp.json();
-            
-            // Update Avatar globally
-            const avatarBtns = document.querySelectorAll('.header-avatar');
-            const initials = userProfile.first_name ? userProfile.first_name[0] + (userProfile.last_name ? userProfile.last_name[0] : '') : userProfile.email[0].toUpperCase();
-            avatarBtns.forEach(btn => btn.textContent = initials);
+        const response = await fetch('/api/documents/');
+        const docs = await response.json();
 
-            if (!userProfile.dpdp_consent_processing) {
-                document.getElementById('mandatory-consent-modal').classList.add('active');
-            } else {
-                await loadDashboard();
-            }
+        if (docs.length > 0) {
+            currentDocId = docs[0].id;
+            await loadDocument(currentDocId);
         }
     } catch (e) {
-        console.error("Failed to load profile:", e);
+        console.error("Failed to load documents:", e);
     }
 }
 
@@ -859,7 +726,7 @@ function handleEditorUpdate(sectionId, content) {
 
 async function createSection() {
     if (!currentDocId) return;
-    const title = await window.customPrompt("Create Section", "Section Title", "e.g. Methodology", "Create");
+    const title = prompt("Enter section title:");
     if (!title) return;
 
     try {
@@ -880,7 +747,7 @@ async function createSection() {
 }
 
 async function deleteSection(sectionId) {
-    if (!await window.confirmDelete("Are you sure you want to delete this section and all its contents?")) return;
+    if (!confirm("Are you sure you want to delete this section and all its contents?")) return;
 
     try {
         const response = await fetch(`/api/sections/${sectionId}/`, {
@@ -896,7 +763,7 @@ async function deleteSection(sectionId) {
 }
 
 async function createSubsection(parentId) {
-    const title = await window.customPrompt("Create Subsection", "Subsection Title", "e.g. Subsection Name", "Create");
+    const title = prompt("Enter subsection title:");
     if (!title) return;
 
     try {
@@ -1365,7 +1232,7 @@ async function loadAuthors() {
                     <div class="img-thumb-caption">${escapeHtml(author.name)}</div>
                     <div class="img-thumb-label" style="font-family:inherit;color:var(--brand-500);">${escapeHtml(author.organization || author.email || 'No Details')}</div>
                 </div>
-                <button class="card-delete-btn" onclick="event.stopPropagation(); deleteAuthor(${author.id})" title="Delete">×</button>
+                <button onclick="event.stopPropagation(); deleteAuthor(${author.id})" style="background:none;border:none;color:var(--brand-400);cursor:pointer;padding:4px;font-size:16px;" title="Delete">×</button>
             </div>
         `).join('');
     } catch (e) {
@@ -1497,7 +1364,7 @@ async function editAuthor(authorId) {
 async function deleteAuthor(authorId) {
     const id = authorId || document.getElementById('author-id').value;
     if (!id) return;
-    if (!await window.confirmDelete('Are you sure you want to delete this author?')) return;
+    if (!confirm('Are you sure you want to delete this author?')) return;
 
     try {
         const response = await fetch(`/api/authors/${id}/`, {
@@ -1567,7 +1434,6 @@ function renderGallery() {
                     <div class="img-thumb-caption">${escapeHtml(caption)}</div>
                     <div class="img-thumb-label">${escapeHtml(label)}</div>
                 </div>
-                <button class="card-delete-btn" onclick="event.stopPropagation(); deleteImage(${img.id})" title="Delete">×</button>
             </div>`;
     }).join('');
 
@@ -1593,10 +1459,8 @@ function selectImage(imgId) {
     const preview = document.getElementById('img-preview-container');
     preview.innerHTML = `<img src="${escapeHtml(img.image_url)}" style="max-width:100%; max-height:220px; object-fit:contain;" alt="preview">`;
 
-    const saveBtn = document.getElementById('img-save-btn');
-    if (saveBtn) saveBtn.style.display = '';
-    const deleteBtn = document.getElementById('img-delete-btn');
-    if (deleteBtn) deleteBtn.style.display = '';
+    document.getElementById('img-save-btn').style.display = '';
+    document.getElementById('img-delete-btn').style.display = '';
 
     renderGallery();
 }
@@ -1715,10 +1579,10 @@ async function saveImageMeta() {
 }
 
 
-async function deleteImage(imageId) {
-    const imgId = imageId || document.getElementById('img-selected-id').value;
+async function deleteImage() {
+    const imgId = document.getElementById('img-selected-id').value;
     if (!imgId) return;
-    if (!await window.confirmDelete('Delete this image from the paper?')) return;
+    if (!confirm('Delete this image from the paper?')) return;
 
     try {
         const res = await fetch(`/api/images/${imgId}/`, { 
@@ -1730,10 +1594,8 @@ async function deleteImage(imageId) {
         document.getElementById('img-selected-id').value = '';
         document.getElementById('img-preview-container').innerHTML =
             '<span>Select an image to preview &amp; edit</span>';
-        const saveBtn = document.getElementById('img-save-btn');
-        if (saveBtn) saveBtn.style.display = 'none';
-        const deleteBtn = document.getElementById('img-delete-btn');
-        if (deleteBtn) deleteBtn.style.display = 'none';
+        document.getElementById('img-save-btn').style.display = 'none';
+        document.getElementById('img-delete-btn').style.display = 'none';
         document.getElementById('img-caption').value = '';
         document.getElementById('img-label').value = '';
         document.getElementById('img-width').value = 0.9;
@@ -1895,7 +1757,6 @@ function renderReferencesList() {
                 <div class="img-thumb-caption" style="font-size:13px;">[${escapeHtml(ref.citation_key)}]</div>
                 <div class="img-thumb-label" style="font-family:inherit; color:var(--brand-500);">${escapeHtml(ref.description || 'No description')}</div>
             </div>
-            <button class="card-delete-btn" onclick="event.stopPropagation(); deleteReference(${ref.id})" title="Delete">×</button>
         `;
         
         container.appendChild(div);
@@ -1955,8 +1816,7 @@ function showAddReferenceForm() {
     document.getElementById('ref-key').value = '';
     document.getElementById('ref-bibtex').value = '';
     
-    const deleteBtn = document.getElementById('ref-delete-btn');
-    if (deleteBtn) deleteBtn.style.display = 'none';
+    document.getElementById('ref-delete-btn').style.display = 'none';
     document.getElementById('ref-form-error').style.display = 'none';
     
     switchRefInputMode('doi');
@@ -1975,8 +1835,7 @@ function editReference(id) {
     document.getElementById('ref-key').value = ref.citation_key || '';
     document.getElementById('ref-bibtex').value = ref.bibtex || '';
     
-    const deleteBtn = document.getElementById('ref-delete-btn');
-    if (deleteBtn) deleteBtn.style.display = 'block';
+    document.getElementById('ref-delete-btn').style.display = 'block';
     document.getElementById('ref-form-error').style.display = 'none';
     
     switchRefInputMode('bibtex');
@@ -2052,13 +1911,12 @@ async function submitReferenceForm() {
     }
 }
 
-async function deleteReference(refId) {
-    const id = refId || currentRefId;
-    if (!id) return;
-    if (!await window.confirmDelete("Are you sure you want to delete this reference?")) return;
+async function deleteReference() {
+    if (!currentRefId) return;
+    if (!confirm("Are you sure you want to delete this reference?")) return;
     
     try {
-        const response = await fetch(`/api/references/${id}/`, {
+        const response = await fetch(`/api/references/${currentRefId}/`, {
             method: 'DELETE',
             headers: { 'X-CSRFToken': getCsrfToken() }
         });
@@ -2066,9 +1924,7 @@ async function deleteReference(refId) {
         if (!response.ok) throw new Error("Failed to delete");
         
         await fetchReferences();
-        if (id === currentRefId) {
-            showAddReferenceForm();
-        }
+        showAddReferenceForm();
         updateLatexPreview();
         updateCiteDropdowns();
     } catch (e) {
@@ -2521,7 +2377,7 @@ function scrollToComment(sectionId, commentId) {
 window.scrollToComment = scrollToComment;
 
 async function resolveComment(commentId) {
-    if (!await window.confirmDelete("Are you sure you want to resolve this comment and remove its highlight?", "Resolve")) return;
+    if (!confirm("Are you sure you want to resolve this comment and remove its highlight?")) return;
 
     try {
         const response = await fetch(`/api/comments/${commentId}/`, {
@@ -2638,7 +2494,6 @@ function renderTablesList() {
                 <div class="img-thumb-caption" style="font-size:13px;">[${escapeHtml(tab.label)}]</div>
                 <div class="img-thumb-label" style="font-family:inherit; color:var(--brand-500);">${escapeHtml(tab.caption || 'No Caption')}</div>
             </div>
-            <button class="card-delete-btn" onclick="event.stopPropagation(); deleteTable(${tab.id})" title="Delete">×</button>
         `;
         container.appendChild(div);
     });
@@ -2659,8 +2514,7 @@ function showAddTableForm() {
     renderGrid();
 
     populateTableSectionDropdown(null);
-    const deleteBtn = document.getElementById('table-delete-btn');
-    if (deleteBtn) deleteBtn.style.display = 'none';
+    document.getElementById('table-delete-btn').style.display = 'none';
     document.getElementById('table-form-error').style.display = 'none';
     renderTablesList();
 }
@@ -2765,8 +2619,7 @@ function editTable(id) {
     renderGrid();
 
     populateTableSectionDropdown(tab.section);
-    const deleteBtn = document.getElementById('table-delete-btn');
-    if (deleteBtn) deleteBtn.style.display = 'block';
+    document.getElementById('table-delete-btn').style.display = 'block';
     document.getElementById('table-form-error').style.display = 'none';
     renderTablesList();
 }
@@ -2833,13 +2686,12 @@ async function submitTableForm() {
 }
 window.submitTableForm = submitTableForm;
 
-async function deleteTable(tableId) {
-    const id = tableId || currentTableId;
-    if (!id) return;
-    if (!await window.confirmDelete("Are you sure you want to delete this table?")) return;
+async function deleteTable() {
+    if (!currentTableId) return;
+    if (!confirm("Are you sure you want to delete this table?")) return;
 
     try {
-        const response = await fetch(`/api/tables/${id}/`, {
+        const response = await fetch(`/api/tables/${currentTableId}/`, {
             method: 'DELETE',
             headers: { 'X-CSRFToken': getCsrfToken() }
         });
@@ -2847,9 +2699,7 @@ async function deleteTable(tableId) {
         if (!response.ok) throw new Error("Delete failed");
         
         await fetchTables();
-        if (id === currentTableId) {
-            showAddTableForm();
-        }
+        showAddTableForm();
         await updateLatexPreview();
     } catch(e) {
         console.error("Error deleting table:", e);
@@ -3381,8 +3231,6 @@ function convertLatexToHTML(latex) {
             const num = tabMap.get(label) || '?';
             const romanNum = toRoman(num);
             
-            const matchingTab = tablesList.find(t => t.label === label);
-            let tableHtml = '';
             if (matchingTab) {
                 try {
                     const grid = JSON.parse(matchingTab.content);
@@ -3544,224 +3392,3 @@ window.resolveComment = resolveComment;
 window.switchRefMenuTab = switchRefMenuTab;
 window.insertFloatingFootnote = insertFloatingFootnote;
 window.insertFloatingComment = insertFloatingComment;
-
-window.handleCredentialResponse = async function(response) {
-    try {
-        const res = await fetch('/api/auth/google/', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': getCsrfToken()
-            },
-            body: JSON.stringify({ token: response.credential })
-        });
-        const data = await res.json();
-        if (data.success) {
-            window.location.reload();
-        } else {
-            alert("Authentication failed: " + data.error);
-        }
-    } catch (e) {
-        console.error("Auth error:", e);
-    }
-};
-// ============================================================
-// DASHBOARD & PROFILE LOGIC
-// ============================================================
-
-window.toggleHeaderVisibility = function(isDashboard) {
-    const divider = document.getElementById('header-divider');
-    const docInfo = document.getElementById('header-doc-info');
-    const sidebarToggle = document.getElementById('sidebar-toggle');
-    if (divider) divider.style.display = isDashboard ? 'none' : 'block';
-    if (docInfo) docInfo.style.display = isDashboard ? 'none' : 'flex';
-    if (sidebarToggle) sidebarToggle.style.visibility = isDashboard ? 'hidden' : 'visible';
-};
-
-window.loadDashboard = async function() {
-    document.getElementById('editor-view').style.display = 'none';
-    document.getElementById('dashboard-view').style.display = 'flex';
-    if(typeof toggleHeaderVisibility === 'function') toggleHeaderVisibility(true);
-    
-    try {
-        const response = await fetch('/api/documents/');
-        const docs = await response.json();
-        
-        const grid = document.getElementById('dashboard-grid');
-        grid.innerHTML = '';
-        
-        docs.forEach(doc => {
-            const card = document.createElement('div');
-            card.className = 'document-card';
-            card.onclick = () => {
-                document.getElementById('dashboard-view').style.display = 'none';
-                document.getElementById('editor-view').style.display = 'flex';
-                if(typeof toggleHeaderVisibility === 'function') toggleHeaderVisibility(false);
-                loadDocument(doc.id);
-            };
-            
-            const dateStr = new Date(doc.updated_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
-            
-            card.innerHTML = `
-                <div>
-                    <h3 class="doc-card-title">${doc.title || 'Untitled Paper'}</h3>
-                    <div class="doc-card-meta">${doc.index_terms || 'No tags'}</div>
-                </div>
-                <div class="doc-card-footer">
-                    <span class="doc-card-date">Last modified: ${dateStr}</span>
-                    <div class="doc-card-actions">
-                        <button class="doc-card-btn delete" onclick="event.stopPropagation(); window.deleteDocument(${doc.id}, '${doc.title.replace(/'/g, "\\'")}')" title="Delete Paper">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-                        </button>
-                    </div>
-                </div>
-            `;
-            grid.appendChild(card);
-        });
-    } catch (e) {
-        console.error("Failed to load dashboard:", e);
-    }
-};
-
-window.createNewDocument = async function() {
-    try {
-        const title = await window.customPrompt("New Paper", "Paper Title", "e.g. A Study on Neural Networks", "Create");
-        if (!title) return;
-        
-        const response = await fetch('/api/documents/', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': getCsrfToken()
-            },
-            body: JSON.stringify({ title })
-        });
-        
-        if (response.ok) {
-            const doc = await response.json();
-            document.getElementById('dashboard-view').style.display = 'none';
-            document.getElementById('editor-view').style.display = 'flex';
-            if(typeof toggleHeaderVisibility === 'function') toggleHeaderVisibility(false);
-            loadDocument(doc.id);
-        }
-    } catch (e) {
-        console.error("Failed to create document:", e);
-    }
-};
-
-window.deleteDocument = async function(id, title) {
-    const confirm = await window.confirmDelete(`Are you sure you want to delete "${title}"?`, 'Delete');
-    if (!confirm) return;
-    
-    try {
-        await fetch(`/api/documents/${id}/`, {
-            method: 'DELETE',
-            headers: { 'X-CSRFToken': getCsrfToken() }
-        });
-        loadDashboard();
-    } catch (e) {
-        console.error("Failed to delete document:", e);
-    }
-};
-
-window.openProfileModal = function() {
-    if (!userProfile) return;
-    document.getElementById('modal-user-name').textContent = `${userProfile.first_name} ${userProfile.last_name}`;
-    document.getElementById('modal-user-email').textContent = userProfile.email;
-    document.getElementById('dpdp-processing-check').checked = userProfile.dpdp_consent_processing;
-    document.getElementById('dpdp-comm-check').checked = userProfile.dpdp_consent_communication;
-    
-    document.getElementById('profile-modal').classList.add('active');
-};
-
-window.closeProfileModal = function() {
-    document.getElementById('profile-modal').classList.remove('active');
-};
-
-window.saveProfileSettings = async function() {
-    const processing = document.getElementById('dpdp-processing-check').checked;
-    const comm = document.getElementById('dpdp-comm-check').checked;
-    
-    try {
-        const response = await fetch('/api/auth/profile/', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': getCsrfToken()
-            },
-            body: JSON.stringify({
-                dpdp_consent_processing: processing,
-                dpdp_consent_communication: comm
-            })
-        });
-        if (response.ok) {
-            userProfile.dpdp_consent_processing = processing;
-            userProfile.dpdp_consent_communication = comm;
-        }
-    } catch (e) {
-        console.error("Failed to update profile settings:", e);
-    }
-};
-
-window.acceptMandatoryConsent = async function() {
-    const processing = document.getElementById('mandatory-dpdp-check').checked;
-    if (!processing) {
-        alert("You must consent to the privacy policy to use the application.");
-        return;
-    }
-    
-    try {
-        const response = await fetch('/api/auth/profile/', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': getCsrfToken()
-            },
-            body: JSON.stringify({
-                dpdp_consent_processing: true,
-                dpdp_consent_communication: false
-            })
-        });
-        if (response.ok) {
-            document.getElementById('mandatory-consent-modal').classList.remove('active');
-            userProfile.dpdp_consent_processing = true;
-            loadDashboard();
-        }
-    } catch (e) {
-        console.error("Failed to update mandatory consent:", e);
-    }
-};
-
-window.logoutUser = async function() {
-    try {
-        await fetch('/api/auth/logout/', {
-            method: 'POST',
-            headers: { 'X-CSRFToken': getCsrfToken() }
-        });
-        window.location.reload();
-    } catch (e) {
-        console.error("Logout failed:", e);
-    }
-};
-
-window.promptAccountDeletion = async function() {
-    const confirm = await window.confirmDelete("Are you sure you want to permanently erase your account and ALL data? This action cannot be undone.", "Delete");
-    if (!confirm) return;
-    
-    try {
-        await fetch('/api/auth/delete_account/', {
-            method: 'POST',
-            headers: { 'X-CSRFToken': getCsrfToken() }
-        });
-        window.location.reload();
-    } catch (e) {
-        console.error("Account deletion failed:", e);
-    }
-};
-
-window.openPrivacyModal = function() {
-    document.getElementById('privacy-policy-modal').classList.add('active');
-};
-window.closePrivacyModal = function() {
-    document.getElementById('privacy-policy-modal').classList.remove('active');
-};;
