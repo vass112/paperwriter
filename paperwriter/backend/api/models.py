@@ -162,6 +162,26 @@ def create_user_profile(sender, instance, created, **kwargs):
             order=1
         )
         
+        # Create Table
+        PaperTable.objects.create(
+            document=doc,
+            caption="Comparison of Formatting Metrics",
+            label="tab:comparison",
+            style="booktabs",
+            content='[["Metric", "Standard Editor", "PaperWriter"], ["Formatting Time", "2 hours", "5 mins"], ["Citation Errors", "High", "None"]]',
+            order=1
+        )
+        
+        # Create Image
+        PaperImage.objects.create(
+            document=doc,
+            image="paper_images/sample_figure.png",
+            caption="A visual overview of the system architecture",
+            label="fig:architecture",
+            width=0.9,
+            order=1
+        )
+        
         # Create Sections
         Section.objects.create(
             document=doc, title="Abstract", section_type="abstract", order=1,
@@ -173,7 +193,7 @@ def create_user_profile(sender, instance, created, **kwargs):
         )
         Section.objects.create(
             document=doc, title="Methodology", section_type="methodology", order=3,
-            content="<p>Our methodology involves bridging the gap between WYSIWYG editors and LaTeX compilers. You can add figures, tables, and complex mathematical equations using our built-in AI Equation Helper.</p>"
+            content="<p>Our methodology involves bridging the gap between WYSIWYG editors and LaTeX compilers. You can reference figures (e.g., see Figure \\ref{fig:architecture}) and tables (see Table \\ref{tab:comparison}) dynamically.</p><p>You can also insert inline equations like $E = mc^2$ and block equations:</p><p>$$ \\mathcal{L} = \\sum_{i=1}^{N} (y_i - \\hat{y}_i)^2 + \\lambda ||W||^2 $$</p>"
         )
         Section.objects.create(
             document=doc, title="Results", section_type="results", order=4,
