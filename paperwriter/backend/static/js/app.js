@@ -1763,7 +1763,6 @@ async function uploadImage(file) {
         setupImageDropZone();
         await loadImages();
         selectImage(newImg.id);
-        await updateLatexPreview();
     } catch (e) {
         console.error('Upload error:', e);
         zone.innerHTML = origHTML;
