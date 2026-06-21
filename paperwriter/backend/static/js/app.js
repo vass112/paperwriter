@@ -1840,7 +1840,7 @@ function updateFigRefBars() {
 function insertFigureRef(sectionId, refLabel) {
     const editor = editors[sectionId];
     if (!editor) return;
-    editor.chain().focus().insertContent(`\\ref{${refLabel}}`).run();
+    editor.chain().focus().insertContent(`<span class="ref-chip" data-type="ref" data-label="${refLabel}"></span>`).run();
 }
 
 // ============================================================
@@ -1883,7 +1883,7 @@ window.insertCitation = insertCitation;
 function insertCitation(sectionId, citeKey) {
     const editor = editors[sectionId];
     if (!editor) return;
-    editor.chain().focus().insertContent(`~\\cite{${citeKey}}`).run();
+    editor.chain().focus().insertContent(`&nbsp;<span class="ref-chip" data-type="cite" data-label="${citeKey}"></span>`).run();
 }
 
 
@@ -2362,9 +2362,9 @@ function insertFloatingCitation(citeKey) {
     
     const { from, to } = editor.state.selection;
     if (from === to) {
-        editor.chain().focus().insertContent(`~\\cite{${citeKey}}`).run();
+        editor.chain().focus().insertContent(`&nbsp;<span class="ref-chip" data-type="cite" data-label="${citeKey}"></span>`).run();
     } else {
-        editor.chain().focus().insertContentAt(to, `~\\cite{${citeKey}}`).run();
+        editor.chain().focus().insertContentAt(to, `&nbsp;<span class="ref-chip" data-type="cite" data-label="${citeKey}"></span>`).run();
     }
 
     document.getElementById('floating-cite-trigger').style.display = 'none';
@@ -2379,9 +2379,9 @@ function insertFloatingFigure(figLabel) {
     
     const { from, to } = editor.state.selection;
     if (from === to) {
-        editor.chain().focus().insertContent(`\\ref{${figLabel}}`).run();
+        editor.chain().focus().insertContent(`<span class="ref-chip" data-type="ref" data-label="${figLabel}"></span>`).run();
     } else {
-        editor.chain().focus().insertContentAt(to, ` \\ref{${figLabel}}`).run();
+        editor.chain().focus().insertContentAt(to, ` <span class="ref-chip" data-type="ref" data-label="${figLabel}"></span>`).run();
     }
 
     document.getElementById('floating-cite-trigger').style.display = 'none';
@@ -2396,9 +2396,9 @@ function insertFloatingTable(tabLabel) {
     
     const { from, to } = editor.state.selection;
     if (from === to) {
-        editor.chain().focus().insertContent(`\\ref{${tabLabel}}`).run();
+        editor.chain().focus().insertContent(`<span class="ref-chip" data-type="ref" data-label="${tabLabel}"></span>`).run();
     } else {
-        editor.chain().focus().insertContentAt(to, ` \\ref{${tabLabel}}`).run();
+        editor.chain().focus().insertContentAt(to, ` <span class="ref-chip" data-type="ref" data-label="${tabLabel}"></span>`).run();
     }
 
     document.getElementById('floating-cite-trigger').style.display = 'none';
@@ -2413,9 +2413,9 @@ function insertFloatingEquation(eqLabel) {
     
     const { from, to } = editor.state.selection;
     if (from === to) {
-        editor.chain().focus().insertContent(`\\ref{${eqLabel}}`).run();
+        editor.chain().focus().insertContent(`<span class="ref-chip" data-type="ref" data-label="${eqLabel}"></span>`).run();
     } else {
-        editor.chain().focus().insertContentAt(to, ` \\ref{${eqLabel}}`).run();
+        editor.chain().focus().insertContentAt(to, ` <span class="ref-chip" data-type="ref" data-label="${eqLabel}"></span>`).run();
     }
 
     document.getElementById('floating-cite-trigger').style.display = 'none';
