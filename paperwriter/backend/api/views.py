@@ -117,9 +117,28 @@ class DocumentViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         if self.request.user.is_authenticated:
-            serializer.save(user=self.request.user)
+            doc = serializer.save(user=self.request.user)
         else:
-            serializer.save()
+            doc = serializer.save()
+
+        from .models import Section
+        standard_sections = [
+            ("Abstract", "abstract"),
+            ("Introduction", "intro"),
+            ("Related Work", "related_work"),
+            ("Methodology", "methodology"),
+            ("Results", "results"),
+            ("Conclusion", "conclusion"),
+            ("References", "references")
+        ]
+        
+        for idx, (title, sec_type) in enumerate(standard_sections, start=1):
+            Section.objects.create(
+                document=doc,
+                title=title,
+                section_type=sec_type,
+                order=idx
+            )
 
     @action(detail=True, methods=['post'])
     def add_section(self, request, pk=None):
