@@ -369,23 +369,14 @@ def generate_latex_source(document):
         else:
             unassigned_images.append(img)
 
-    # Auto-assign images to the section where they are referenced
-    for img in list(unassigned_images):
-        if not img.label:
-            continue
-        for section in sections:
-            # Check for both HTML chips and raw LaTeX references
-            if section.content and (f'data-label="{img.label}"' in section.content or f'\\ref{{{img.label}}}' in section.content):
-                section_images.setdefault(section.id, []).append(img)
-                unassigned_images.remove(img)
-                break
-
     # Pre-build a map: section_id -> list of tables assigned to it
     all_tables = list(document.tables.all().order_by('order', 'created_at'))
     section_tables = {}   # section_id -> [table, ...]
     for t in all_tables:
         if t.section_id:
             section_tables.setdefault(t.section_id, []).append(t)
+
+    emitted_image_ids = set()
 
     def emit_figure(img):
         """Return a list of LaTeX lines for a single figure."""
@@ -494,9 +485,32 @@ def generate_latex_source(document):
                 return f'$${latex}$$'
             return f'${latex}$'
 
-        # Convert chips back to LaTeX
+        def process_ref_cite(match):
+            ref_type = match.group(1)
+            label = match.group(2)
+            out = f'\\{ref_type}{{{label}}}'
+            if ref_type == 'ref':
+                img = next((i for i in all_images if i.label == label), None)
+                if img and img.id not in emitted_image_ids:
+                    emitted_image_ids.add(img.id)
+                    out += '\n' + '\n'.join(emit_figure(img)) + '\n'
+            return out
+
+        # Convert chips back to LaTeX and dynamically emit first occurrences of figures
         text = re.sub(r'<span[^>]*class="eq-chip"[^>]*data-type="(inline|block)"[^>]*data-latex="([^"]+)"[^>]*>.*?</span>', unescape_latex, content)
-        text = re.sub(r'<span[^>]*data-type="(ref|cite)"[^>]*data-label="([^"]+)"[^>]*>.*?</span>', r'\\\1{\2}', text)
+        text = re.sub(r'<span[^>]*data-type="(ref|cite)"[^>]*data-label="([^"]+)"[^>]*>.*?</span>', process_ref_cite, text)
+        
+        # Also catch raw LaTeX \ref{} that weren't turned into chips
+        def process_raw_ref(match):
+            label = match.group(1)
+            out = f'\\ref{{{label}}}'
+            img = next((i for i in all_images if i.label == label), None)
+            if img and img.id not in emitted_image_ids:
+                emitted_image_ids.add(img.id)
+                out += '\n' + '\n'.join(emit_figure(img)) + '\n'
+            return out
+            
+        text = re.sub(r'\\ref{([^}]+)}', process_raw_ref, text)
         
         # Convert simple HTML tags to LaTeX
         text = re.sub(r'<p>(.*?)</p>', r'\1\n\n', text)
@@ -537,9 +551,11 @@ def generate_latex_source(document):
             if processed_content:
                 lines.append(processed_content)
 
-        # Emit figures assigned to section
+        # Emit any remaining figures explicitly assigned to this section (if not already emitted inline)
         for img in section_images.get(section.id, []):
-            lines.extend(emit_figure(img))
+            if img.id not in emitted_image_ids:
+                emitted_image_ids.add(img.id)
+                lines.extend(emit_figure(img))
 
         # Emit tables assigned to section
         for t in section_tables.get(section.id, []):
