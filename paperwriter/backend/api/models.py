@@ -135,6 +135,58 @@ class UserProfile(models.Model):
 def create_user_profile(sender, instance, created, **kwargs):
     if created:
         UserProfile.objects.create(user=instance)
+        
+        # Create Sample Document
+        doc = Document.objects.create(
+            user=instance,
+            title="Sample Project: Introduction to PaperWriter",
+            index_terms="sample, paperwriter, formatting, latex"
+        )
+        
+        # Create Author
+        Author.objects.create(
+            document=doc,
+            name=instance.get_full_name() or instance.username or "Demo User",
+            department="Department of Research",
+            organization="PaperWriter University",
+            email=instance.email,
+            order=1
+        )
+
+        # Create Reference
+        Reference.objects.create(
+            document=doc,
+            citation_key="paperwriter2026",
+            description="PaperWriter Documentation",
+            bibtex="@article{paperwriter2026,\n  title={A modern approach to academic writing},\n  author={PaperWriter Team},\n  journal={Journal of Advanced Formatting},\n  year={2026}\n}",
+            order=1
+        )
+        
+        # Create Sections
+        Section.objects.create(
+            document=doc, title="Abstract", section_type="abstract", order=1,
+            content="<p>Welcome to PaperWriter! This sample project demonstrates the core features of the editor. PaperWriter allows you to write academic papers using a rich-text editor while seamlessly exporting to professional IEEE-formatted PDF or LaTeX source code.</p>"
+        )
+        Section.objects.create(
+            document=doc, title="Introduction", section_type="intro", order=2,
+            content="<p>Writing research papers often requires strict adherence to formatting guidelines. PaperWriter abstracts away the complexity of LaTeX, allowing you to focus purely on content. You can easily use <strong>bold</strong>, <em>italics</em>, and various heading levels.</p><p>To cite a reference, use the Library section in the left sidebar, or highlight text to open the floating menu. For example, this is a citation to our documentation.</p>"
+        )
+        Section.objects.create(
+            document=doc, title="Methodology", section_type="methodology", order=3,
+            content="<p>Our methodology involves bridging the gap between WYSIWYG editors and LaTeX compilers. You can add figures, tables, and complex mathematical equations using our built-in AI Equation Helper.</p>"
+        )
+        Section.objects.create(
+            document=doc, title="Results", section_type="results", order=4,
+            content="<p>The results show a significant decrease in the time required to format academic papers. See the Tables and Figures managers in the left sidebar to add and configure rich academic elements.</p>"
+        )
+        Section.objects.create(
+            document=doc, title="Conclusion", section_type="conclusion", order=5,
+            content="<p>We conclude that PaperWriter provides an efficient and user-friendly environment for scholars. Feel free to delete this sample project when you're ready to start your own!</p>"
+        )
+        Section.objects.create(
+            document=doc, title="References", section_type="references", order=6,
+            content=""
+        )
 
 @receiver(post_save, sender=User)
 def save_user_profile(sender, instance, **kwargs):
