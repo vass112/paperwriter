@@ -853,6 +853,27 @@ body.is-resizing iframe {
 }
 
 /* Citation chip styling */
+.ref-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    background: linear-gradient(135deg, var(--brand-50), white);
+    border: 1px solid var(--brand-200);
+    border-radius: 12px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--brand-700);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    margin: 0 4px;
+    user-select: none;
+    vertical-align: middle;
+}
+.ref-chip[data-type="cite"] {
+    background: linear-gradient(135deg, #f0fdf4, white);
+    border-color: #bbf7d0;
+    color: #15803d;
+}
 .citation {
     font-family: 'Inter', sans-serif;
     font-size: 12px;

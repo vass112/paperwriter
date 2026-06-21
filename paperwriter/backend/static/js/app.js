@@ -1,5 +1,53 @@
-import { Editor } from 'https://esm.sh/@tiptap/core@2.11.5';
+import { Editor, Node, mergeAttributes, InputRule } from 'https://esm.sh/@tiptap/core@2.11.5';
 import StarterKit from 'https://esm.sh/@tiptap/starter-kit@2.11.5';
+
+const LatexRefNode = Node.create({
+  name: 'latexRef',
+  group: 'inline',
+  inline: true,
+  atom: true,
+
+  addAttributes() {
+    return {
+      refType: { default: 'ref' },
+      label: { default: '' },
+    }
+  },
+
+  parseHTML() {
+    return [
+      {
+        tag: 'span.ref-chip',
+        getAttrs: element => ({
+          refType: element.getAttribute('data-type'),
+          label: element.getAttribute('data-label'),
+        }),
+      },
+    ]
+  },
+
+  renderHTML({ HTMLAttributes }) {
+    const text = HTMLAttributes.refType === 'cite' ? `[${HTMLAttributes.label}]` : `${HTMLAttributes.label}`;
+    const icon = HTMLAttributes.refType === 'cite' ? '📚' : '📌';
+    return ['span', mergeAttributes(HTMLAttributes, { class: 'ref-chip', 'data-type': HTMLAttributes.refType, 'data-label': HTMLAttributes.label, 'contenteditable': 'false' }), `${icon} ${text}`]
+  },
+
+  addInputRules() {
+    return [
+      new InputRule({
+        find: /\\(ref|cite)\{([^}]+)\}/,
+        handler: ({ state, range, match }) => {
+          const { tr } = state;
+          const start = range.from;
+          const end = range.to;
+          const refType = match[1];
+          const label = match[2];
+          tr.replaceWith(start, end, this.type.create({ refType, label }));
+        },
+      }),
+    ]
+  },
+})
 
 let editors = {};
 let currentDocId = null;
@@ -643,8 +691,9 @@ async function loadDocument(id) {
                     element: editorElement,
                     extensions: [
                         StarterKit,
+                        LatexRefNode,
                     ],
-                    content: section.content || '<p></p>',
+                    content: (section.content || '<p></p>').replace(/\\(ref|cite)\{([^}]+)\}/g, '<span class="ref-chip" data-type="$1" data-label="$2"></span>'),
                     onUpdate: ({ editor }) => {
                         handleEditorUpdate(section.id, editor.getHTML());
                     },

@@ -472,8 +472,11 @@ def generate_latex_source(document):
     def process_content_html(content):
         if not content:
             return ""
+        # Convert chips back to LaTeX
+        text = re.sub(r'<span[^>]*data-type="(ref|cite)"[^>]*data-label="([^"]+)"[^>]*>.*?</span>', r'\\\1{\2}', content)
+        
         # Convert simple HTML tags to LaTeX
-        text = re.sub(r'<p>(.*?)</p>', r'\1\n\n', content)
+        text = re.sub(r'<p>(.*?)</p>', r'\1\n\n', text)
         # Remove any existing h3/h4 formatting as we now use real subsections
         text = re.sub(r'<h3>(.*?)</h3>', r'\1\n\n', text)
         text = re.sub(r'<h4>(.*?)</h4>', r'\1\n\n', text)
