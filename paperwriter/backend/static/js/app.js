@@ -1729,12 +1729,19 @@ function setupImageDropZone() {
     });
 }
 
+let isUploadingImage = false;
 async function uploadImage(file) {
     if (!currentDocId) { alert('No document loaded.'); return; }
     if (!file.type.startsWith('image/')) { alert('Please select an image file.'); return; }
+    if (isUploadingImage) return;
 
     const zone = document.getElementById('img-drop-zone');
     const origHTML = zone.innerHTML;
+    
+    // Safety check in case it's already in uploading state
+    if (origHTML.includes('Uploading...')) return;
+    
+    isUploadingImage = true;
     zone.innerHTML = '<div style="padding:20px; color:var(--brand-900);">⏳ Uploading...</div>';
 
     try {
@@ -1769,6 +1776,8 @@ async function uploadImage(file) {
         zone._setupDone = false;
         setupImageDropZone();
         alert('Upload failed: ' + e.message);
+    } finally {
+        isUploadingImage = false;
     }
 }
 
