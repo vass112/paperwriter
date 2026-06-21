@@ -547,6 +547,12 @@ def generate_latex_source(document):
     for section in top_sections:
         latex_content.extend(emit_section(section, depth=1))
 
+    # Emit unassigned images so they are not silently lost
+    if unassigned_images:
+        latex_content.append(r"% Unassigned Figures")
+        for img in unassigned_images:
+            latex_content.extend(emit_figure(img))
+
     # Output Bibliography if references exist
     if document.references.exists():
         latex_content.append(r"\bibliographystyle{IEEEtran}")
