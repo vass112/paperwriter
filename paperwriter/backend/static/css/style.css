@@ -890,6 +890,35 @@ body.is-resizing iframe {
     border-color: #bbf7d0;
     color: #15803d;
 }
+
+/* Equation chip styling */
+.eq-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    background: linear-gradient(135deg, #fef3c7, white);
+    border: 1px solid #fde68a;
+    border-radius: 12px;
+    font-size: 13px;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 600;
+    color: #b45309;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    margin: 0 4px;
+    user-select: none;
+    vertical-align: middle;
+}
+.eq-chip[data-type="block"] {
+    display: flex;
+    justify-content: center;
+    margin: 10px auto;
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 14px;
+    background: linear-gradient(135deg, #fffbeb, white);
+    max-width: 80%;
+}
 .citation {
     font-family: 'Inter', sans-serif;
     font-size: 12px;

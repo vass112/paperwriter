@@ -472,8 +472,20 @@ def generate_latex_source(document):
     def process_content_html(content):
         if not content:
             return ""
+        
+        import html
+        
+        # Unescape HTML entities from data-latex attributes so they compile properly
+        def unescape_latex(match):
+            eq_type = match.group(1)
+            latex = html.unescape(match.group(2))
+            if eq_type == 'block':
+                return f'$${latex}$$'
+            return f'${latex}$'
+
         # Convert chips back to LaTeX
-        text = re.sub(r'<span[^>]*data-type="(ref|cite)"[^>]*data-label="([^"]+)"[^>]*>.*?</span>', r'\\\1{\2}', content)
+        text = re.sub(r'<span[^>]*class="eq-chip"[^>]*data-type="(inline|block)"[^>]*data-latex="([^"]+)"[^>]*>.*?</span>', unescape_latex, content)
+        text = re.sub(r'<span[^>]*data-type="(ref|cite)"[^>]*data-label="([^"]+)"[^>]*>.*?</span>', r'\\\1{\2}', text)
         
         # Convert simple HTML tags to LaTeX
         text = re.sub(r'<p>(.*?)</p>', r'\1\n\n', text)

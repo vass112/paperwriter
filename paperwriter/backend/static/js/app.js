@@ -49,6 +49,63 @@ const LatexRefNode = Node.create({
   },
 })
 
+const LatexEqNode = Node.create({
+  name: 'latexEq',
+  group: 'inline',
+  inline: true,
+  atom: true,
+
+  addAttributes() {
+    return {
+      eqType: { default: 'inline' },
+      latex: { default: '' },
+    }
+  },
+
+  parseHTML() {
+    return [
+      {
+        tag: 'span.eq-chip',
+        getAttrs: element => ({
+          eqType: element.getAttribute('data-type'),
+          latex: element.getAttribute('data-latex'),
+        }),
+      },
+    ]
+  },
+
+  renderHTML({ HTMLAttributes }) {
+    const text = HTMLAttributes.latex;
+    const icon = '∑';
+    return ['span', mergeAttributes(HTMLAttributes, { class: 'eq-chip', 'data-type': HTMLAttributes.eqType, 'data-latex': HTMLAttributes.latex, 'contenteditable': 'false', 'title': HTMLAttributes.latex }), `${icon} ${text.length > 20 ? text.substring(0, 20) + '...' : text}`]
+  },
+
+  addInputRules() {
+    return [
+      new InputRule({
+        find: /\$\$([\s\S]+?)\$\$/,
+        handler: ({ state, range, match }) => {
+          const { tr } = state;
+          const start = range.from;
+          const end = range.to;
+          const latex = match[1];
+          tr.replaceWith(start, end, this.type.create({ eqType: 'block', latex }));
+        },
+      }),
+      new InputRule({
+        find: /(?:\s|^)\$([^$]+)\$/,
+        handler: ({ state, range, match }) => {
+          const { tr } = state;
+          const start = range.from + (match[0].startsWith(' ') || match[0].startsWith('\n') ? 1 : 0);
+          const end = range.to;
+          const latex = match[1];
+          tr.replaceWith(start, end, this.type.create({ eqType: 'inline', latex }));
+        },
+      }),
+    ]
+  },
+})
+
 let editors = {};
 let currentDocId = null;
 let saveTimeout;
@@ -686,8 +743,12 @@ async function loadDocument(id) {
                     extensions: [
                         StarterKit,
                         LatexRefNode,
+                        LatexEqNode,
                     ],
-                    content: (section.content || '<p></p>').replace(/\\(ref|cite)\{([^}]+)\}/g, '<span class="ref-chip" data-type="$1" data-label="$2"></span>'),
+                    content: (section.content || '<p></p>')
+                        .replace(/\\(ref|cite)\{([^}]+)\}/g, '<span class="ref-chip" data-type="$1" data-label="$2"></span>')
+                        .replace(/\$\$([\s\S]+?)\$\$/g, (m, g1) => `<span class="eq-chip" data-type="block" data-latex="${escapeHtml(g1)}"></span>`)
+                        .replace(/\$([^$]+)\$/g, (m, g1) => `<span class="eq-chip" data-type="inline" data-latex="${escapeHtml(g1)}"></span>`),
                     onUpdate: ({ editor }) => {
                         handleEditorUpdate(section.id, editor.getHTML());
                     },
