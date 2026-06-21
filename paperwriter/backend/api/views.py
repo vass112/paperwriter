@@ -369,6 +369,17 @@ def generate_latex_source(document):
         else:
             unassigned_images.append(img)
 
+    # Auto-assign images to the section where they are referenced
+    for img in list(unassigned_images):
+        if not img.label:
+            continue
+        for section in sections:
+            # Check for both HTML chips and raw LaTeX references
+            if section.content and (f'data-label="{img.label}"' in section.content or f'\\ref{{{img.label}}}' in section.content):
+                section_images.setdefault(section.id, []).append(img)
+                unassigned_images.remove(img)
+                break
+
     # Pre-build a map: section_id -> list of tables assigned to it
     all_tables = list(document.tables.all().order_by('order', 'created_at'))
     section_tables = {}   # section_id -> [table, ...]
@@ -546,12 +557,6 @@ def generate_latex_source(document):
     
     for section in top_sections:
         latex_content.extend(emit_section(section, depth=1))
-
-    # Emit unassigned images so they are not silently lost
-    if unassigned_images:
-        latex_content.append(r"% Unassigned Figures")
-        for img in unassigned_images:
-            latex_content.extend(emit_figure(img))
 
     # Output Bibliography if references exist
     if document.references.exists():
