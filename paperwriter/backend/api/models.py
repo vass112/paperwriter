@@ -176,7 +176,7 @@ def create_user_profile(sender, instance, created, **kwargs):
         # Create Image
         PaperImage.objects.create(
             document=doc,
-            image="paper_images/sample_figure.png",
+            image_base64="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=",
             caption="A visual overview of the system architecture",
             label="fig:architecture",
             width=0.9,

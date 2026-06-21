@@ -28,7 +28,12 @@ def dev_login(request):
         user.first_name = 'Dev'
         user.last_name = 'User'
         user.save()
-        UserProfile.objects.create(user=user)
+    
+    # Ensure DPDP consent is true for the dev user to skip the modal during tests
+    if hasattr(user, 'profile'):
+        user.profile.dpdp_consent_processing = True
+        user.profile.dpdp_consent_communication = True
+        user.profile.save()
     
     login(request, user)
     return Response({"success": True, "message": "Logged in as dev_test_user"})
