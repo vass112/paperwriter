@@ -4,9 +4,14 @@
 .env
 .env.*
 !.env.example
+*.key
+*.pem
+*.cert
+secrets/
 
 # Database
 *.sqlite3
+db.sqlite3
 
 # Media / uploads
 media/
@@ -16,6 +21,10 @@ staticfiles/
 __pycache__/
 *.py[cod]
 venv/
+*.egg-info/
+dist/
+build/
+*.so
 
 # Node
 node_modules/

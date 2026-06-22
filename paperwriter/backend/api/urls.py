@@ -1,7 +1,7 @@
 from django.urls import path, include
 from rest_framework import routers
 from .views import (
-    DocumentViewSet, AuthorViewSet, PaperImageViewSet, ReferenceViewSet, SectionViewSet, 
+    DocumentViewSet, AuthorViewSet, PaperImageViewSet, ReferenceViewSet, SectionViewSet,
     PaperTableViewSet, CommentViewSet, process_ai_command, process_ai_equation, fetch_doi,
     export_latex, get_latex_source, export_pdf, google_auth, dev_login, logout_user, user_profile, delete_account
 )

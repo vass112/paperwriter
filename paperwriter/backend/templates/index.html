@@ -7,8 +7,7 @@
     <title>PaperWriter — Scholarly Workspace</title>
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <script>
-        window.csrfToken = "{{ csrf_token }}";
-        window.GOOGLE_CLIENT_ID = "{{ google_client_id }}";
+        window.GOOGLE_CLIENT_ID = "{{ google_client_id|escapejs }}";
         window.addEventListener('error', function(e) {
             console.error("GLOBAL ERROR DETECTED:", e.message, "at", e.filename, ":", e.lineno, e.error);
             var errDiv = document.createElement('div');
@@ -41,10 +40,76 @@
             height: 0;
             pointer-events: none;
         }
+        
+        #mobile-warning-overlay {
+            display: none;
+        }
+        @media (max-width: 800px) {
+            #mobile-warning-overlay {
+                display: flex;
+                position: fixed;
+                top: 0; left: 0; right: 0; bottom: 0;
+                background: rgba(248, 250, 252, 0.95);
+                backdrop-filter: blur(8px);
+                z-index: 999999;
+                align-items: center;
+                justify-content: center;
+                padding: 24px;
+                text-align: center;
+            }
+            .mobile-warning-content {
+                background: white;
+                padding: 32px 24px;
+                border-radius: 12px;
+                box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+                max-width: 400px;
+                border: 1px solid #e2e8f0;
+            }
+            
+            /* Basic layout fixes for mobile so it's not totally broken if they dismiss */
+            .main-body {
+                flex-direction: column !important;
+            }
+            .sidebar {
+                width: 100% !important;
+                height: auto !important;
+                max-height: 250px;
+                border-right: none !important;
+                border-bottom: 1px solid var(--border-light);
+            }
+            .right-panel {
+                width: 100% !important;
+                height: 400px !important;
+                border-left: none !important;
+                border-top: 1px solid var(--border-light);
+            }
+            .editor-container {
+                min-width: 0 !important;
+                width: 100% !important;
+            }
+            .resizer {
+                display: none !important;
+            }
+            .dashboard-grid {
+                grid-template-columns: 1fr !important;
+            }
+            .header-doc-info {
+                display: none !important;
+            }
+        }
     </style>
 </head>
 
 <body>
+    <div id="mobile-warning-overlay">
+        <div class="mobile-warning-content">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="48" height="48" style="color: #ef4444; margin-bottom: 16px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+            <h2 style="font-family: 'Lora', serif; color: #0f172a; margin-bottom: 12px; font-size: 24px; font-weight: 600;">Mobile Device Detected</h2>
+            <p style="color: #475569; font-size: 15px; line-height: 1.5; margin-bottom: 24px;">PaperWriter is a rich scholarly workspace that requires a larger screen. For full functionality, please use a PC or Laptop.</p>
+            <button onclick="document.getElementById('mobile-warning-overlay').style.display='none'" style="width: 100%; justify-content: center; background: #0f172a; color: white; border: none; padding: 10px; border-radius: 6px; font-weight: 500; cursor: pointer;">I understand, proceed anyway</button>
+        </div>
+    </div>
+
     {% if user.is_authenticated %}
     <div id="app">
         <!-- ===== TOP HEADER BAR ===== -->
