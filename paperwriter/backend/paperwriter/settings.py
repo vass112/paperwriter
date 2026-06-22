@@ -20,6 +20,11 @@ if DEBUG:
     ALLOWED_HOSTS = ['localhost', '127.0.0.1', '[::1]']
 else:
     ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '').split(',') if os.getenv('ALLOWED_HOSTS') else []
+    if os.getenv('VERCEL'):
+        ALLOWED_HOSTS.extend(['.vercel.app', 'paperwriter.app'])
+    if os.getenv('VERCEL_URL'):
+        ALLOWED_HOSTS.append(os.getenv('VERCEL_URL'))
+    
     if not ALLOWED_HOSTS:
         raise RuntimeError("ALLOWED_HOSTS must be set in production")
 

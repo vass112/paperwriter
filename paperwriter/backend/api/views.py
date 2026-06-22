@@ -791,7 +791,6 @@ def compile_pdf_online(latex_source, document, cls_source):
 def export_pdf(request, doc_id):
     """Compile LaTeX to PDF and return it"""
     try:
-    try:
         with transaction.atomic():
             credit, _ = DownloadCredit.objects.get_or_create(user=request.user)
             credit = DownloadCredit.objects.select_for_update().get(id=credit.id)
