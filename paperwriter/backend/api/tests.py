@@ -151,3 +151,97 @@ class LaTeXCompilerTests(TestCase):
         latex = generate_latex_source(doc)
         self.assertIn(r"\toprule", latex)
         self.assertIn(r"A & B \\", latex)
+
+
+class CollaborationTests(TestCase):
+    def setUp(self):
+        self.user1 = User.objects.create_user(username='u1', email='u1@example.com', password='password')
+        self.user2 = User.objects.create_user(username='u2', email='u2@example.com', password='password')
+        self.user3 = User.objects.create_user(username='u3', email='u3@example.com', password='password')
+        
+        self.client1 = Client()
+        self.client1.force_login(self.user1)
+        
+        self.client2 = Client()
+        self.client2.force_login(self.user2)
+        
+        self.client3 = Client()
+        self.client3.force_login(self.user3)
+        
+        self.document = Document.objects.create(user=self.user1, title="U1 Paper")
+        self.section = Section.objects.create(document=self.document, title="U1 Intro", order=1)
+
+    def test_document_sharing_api(self):
+        # User 2 shouldn't be able to access document list
+        response = self.client2.get('/api/documents/')
+        self.assertEqual(response.status_code, 200)
+        # Should only see user2's own sample document (from signal)
+        self.assertEqual(len([d for d in response.json() if d['id'] == self.document.id]), 0)
+
+        # Share document with User 2
+        response = self.client1.post(f'/api/documents/{self.document.id}/share/', {
+            'email': 'u2@example.com'
+        }, content_type='application/json')
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()['success'])
+
+        # Now User 2 can list/retrieve document
+        response = self.client2.get('/api/documents/')
+        self.assertGreaterEqual(len([d for d in response.json() if d['id'] == self.document.id]), 1)
+
+        # User 3 still cannot access it
+        response = self.client3.get(f'/api/documents/{self.document.id}/')
+        self.assertEqual(response.status_code, 404)
+
+        # Unshare User 2
+        response = self.client1.post(f'/api/documents/{self.document.id}/unshare/', {
+            'email': 'u2@example.com'
+        }, content_type='application/json')
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()['success'])
+
+        # User 2 is blocked again
+        response = self.client2.get(f'/api/documents/{self.document.id}/')
+        self.assertEqual(response.status_code, 404)
+
+    def test_section_locking_api(self):
+        # Share document with User 2
+        self.document.collaborators.add(self.user2)
+
+        # User 1 acquires lock
+        response = self.client1.post(f'/api/sections/{self.section.id}/lock/')
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()['locked'])
+        self.assertTrue(response.json()['owner'])
+
+        # User 2 tries to acquire lock - should fail with 423
+        response = self.client2.post(f'/api/sections/{self.section.id}/lock/')
+        self.assertEqual(response.status_code, 423)
+        self.assertFalse(response.json()['locked'])
+
+        # User 1 unlocks
+        response = self.client1.post(f'/api/sections/{self.section.id}/unlock/')
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()['unlocked'])
+
+        # Now User 2 can acquire lock
+        response = self.client2.post(f'/api/sections/{self.section.id}/lock/')
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()['locked'])
+
+    def test_document_heartbeat_api(self):
+        # Share document with User 2
+        self.document.collaborators.add(self.user2)
+
+        # Send heartbeats from User 1 and User 2
+        response1 = self.client1.post(f'/api/documents/{self.document.id}/heartbeat/')
+        self.assertEqual(response1.status_code, 200)
+
+        response2 = self.client2.post(f'/api/documents/{self.document.id}/heartbeat/')
+        self.assertEqual(response2.status_code, 200)
+
+        # Heartbeat returns active users list - check both are present
+        active_users = response2.json()['active_users']
+        emails = [u['email'] for u in active_users]
+        self.assertIn('u1@example.com', emails)
+        self.assertIn('u2@example.com', emails)

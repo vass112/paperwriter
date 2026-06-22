@@ -136,6 +136,11 @@
                 </div>
             </div>
             <div class="header-right">
+                <div id="collab-avatars-group" class="collab-avatars-group" style="display: none; align-items: center; gap: 4px; margin-right: 12px;"></div>
+                <button id="share-doc-btn" class="btn-ghost" style="display: none; height: 32px; padding: 0 12px; font-size: 12px; font-weight: 600; margin-right: 12px; align-items: center; gap: 6px; border: 1px solid var(--border-light); background: transparent;" onclick="openShareModal()">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: block;"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8M16 6l-4-4-4 4M12 2v13"/></svg>
+                    Share
+                </button>
                 <button class="header-menu-btn" id="sidebar-toggle" title="Toggle Sidebar">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
                 </button>
@@ -960,6 +965,34 @@
             <div class="confirm-card-footer" style="margin-top: 0; padding: 0 24px 24px 24px;">
                 <button class="btn-confirm-danger" onclick="promptAccountDeletion()">Erase My Data</button>
                 <button class="btn-confirm-secondary" onclick="logoutUser()">Sign Out</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== SHARE MODAL ===== -->
+    <div id="share-modal" class="modal-overlay">
+        <div class="modal-content confirm-modal-content" style="width: 480px; padding: 0;">
+            <div class="modal-header" style="border-bottom: none; padding-bottom: 0; width: 100%;">
+                <h3>Share Paper</h3>
+                <span class="close-modal" onclick="closeShareModal()">&times;</span>
+            </div>
+            <div class="confirm-card-body" style="padding: 24px; width: 100%; align-items: flex-start; text-align: left; box-sizing: border-box;">
+                <div class="modal-info-box" style="margin-bottom: 16px; width: 100%; box-sizing: border-box;">
+                    Share this document with other registered users by entering their email address.
+                </div>
+                <div style="display: flex; gap: 8px; width: 100%; align-items: flex-end; margin-bottom: 20px; box-sizing: border-box;">
+                    <div class="modal-input-group" style="flex: 1; margin-bottom: 0;">
+                        <label>Collaborator Email</label>
+                        <input type="email" id="share-email-input" class="modal-input" placeholder="e.g. coauthor@university.edu" style="margin-bottom: 0; width: 100%; box-sizing: border-box;">
+                    </div>
+                    <button type="button" class="btn-primary" onclick="addCollaborator()" style="height: 36px; padding: 0 16px; width: auto; flex-shrink: 0;">Add</button>
+                </div>
+                <div id="share-error" class="modal-error" style="margin-bottom: 12px; display: none;"></div>
+                
+                <h4 style="font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--brand-500); margin-bottom: 12px;">Active Collaborators</h4>
+                <div id="share-collabs-list" style="display: flex; flex-direction: column; gap: 8px; width: 100%; max-height: 180px; overflow-y: auto;">
+                    <!-- Populated dynamically -->
+                </div>
             </div>
         </div>
     </div>

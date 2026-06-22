@@ -3241,3 +3241,128 @@ body.is-resizing iframe {
     background: #ffffff;
     border-top: 1px solid var(--brand-100);
 }
+
+/* ============================================================
+   COLLABORATIVE EDITING & PRESENCE
+   ============================================================ */
+
+.collab-avatars-group {
+    display: flex;
+    align-items: center;
+}
+
+.collab-avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 2px solid var(--bg-surface);
+    margin-left: -8px; /* overlap */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
+    color: white;
+    cursor: default;
+    user-select: none;
+    position: relative;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    transition: transform 0.2s;
+}
+
+.collab-avatar:first-child {
+    margin-left: 0;
+}
+
+.collab-avatar:hover {
+    transform: translateY(-2px);
+    z-index: 10;
+}
+
+/* Colors for active avatars */
+.collab-avatar-1 { background-color: #3b82f6; }
+.collab-avatar-2 { background-color: #10b981; }
+.collab-avatar-3 { background-color: #f59e0b; }
+.collab-avatar-4 { background-color: #ec4899; }
+.collab-avatar-5 { background-color: #8b5cf6; }
+
+/* Section Locking Indicators */
+.section-wrapper {
+    position: relative;
+    border-radius: var(--radius-md);
+    transition: all 0.25s ease;
+}
+
+.section-wrapper.locked {
+    border: 1.5px dashed #f59e0b;
+    background-color: #fffbeb;
+}
+
+.section-wrapper.locked .ProseMirror {
+    pointer-events: none !important; /* disables interaction */
+    user-select: none !important;
+}
+
+.section-lock-banner {
+    position: absolute;
+    top: 4px;
+    right: 8px;
+    background: #f59e0b;
+    color: white;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: var(--radius-xs);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    z-index: 5;
+    pointer-events: auto;
+}
+
+/* Share Modal list item */
+.share-collab-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: var(--brand-50);
+    border: 1px solid var(--brand-100);
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    color: var(--brand-900);
+}
+
+.share-collab-item .collab-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.share-collab-item .collab-email {
+    font-size: 11px;
+    color: var(--brand-500);
+}
+
+.share-collab-item .btn-remove {
+    background: transparent;
+    border: none;
+    color: #ef4444;
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 8px;
+    border-radius: var(--radius-xs);
+}
+
+.share-collab-item .btn-remove:hover {
+    background: #fef2f2;
+}
+
+.share-collab-item .owner-badge {
+    font-size: 10px;
+    color: var(--brand-400);
+    font-weight: 600;
+    padding: 4px;
+}

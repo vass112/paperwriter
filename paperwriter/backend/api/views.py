@@ -2,11 +2,11 @@ from django.shortcuts import render
 from rest_framework import viewsets, generics, status
 from rest_framework.response import Response
 from rest_framework.decorators import api_view, action, permission_classes, throttle_classes
-from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnly, AllowAny
 from rest_framework.throttling import UserRateThrottle, AnonRateThrottle
-from .models import Document, Section, Author, PaperImage, Reference, PaperTable, Comment, DownloadCredit, PaymentTransaction, RedeemCode, RedeemCodeUsage, ContactInquiry
-from .serializers import DocumentSerializer, SectionSerializer, AuthorSerializer, PaperImageSerializer, ReferenceSerializer, PaperTableSerializer, CommentSerializer
+from .models import Document, Section, Author, PaperImage, Reference, PaperTable, Comment, DownloadCredit, PaymentTransaction, RedeemCode, RedeemCodeUsage, ContactInquiry, DocumentPresence, SectionLock
+from .serializers import DocumentSerializer, SectionSerializer, AuthorSerializer, PaperImageSerializer, ReferenceSerializer, PaperTableSerializer, CommentSerializer, UserSerializer
 from django.db import transaction
 import hmac
 import hashlib
@@ -185,7 +185,8 @@ class DocumentViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         if self.request.user.is_authenticated:
-            return Document.objects.filter(user=self.request.user)
+            from django.db.models import Q
+            return Document.objects.filter(Q(user=self.request.user) | Q(collaborators=self.request.user)).distinct()
         return Document.objects.none()
 
     def perform_create(self, serializer):
@@ -241,6 +242,90 @@ class DocumentViewSet(viewsets.ModelViewSet):
         )
         return Response(SectionSerializer(section).data, status=status.HTTP_201_CREATED)
 
+    @action(detail=True, methods=['post'])
+    def share(self, request, pk=None):
+        document = self.get_object()
+        if document.user != request.user:
+            return Response({'error': 'Only the document owner can share it.'}, status=status.HTTP_403_FORBIDDEN)
+        
+        email = request.data.get('email')
+        if not email:
+            return Response({'error': 'Email is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if email == request.user.email:
+            return Response({'error': 'You cannot share a document with yourself.'}, status=status.HTTP_400_BAD_REQUEST)
+            
+        try:
+            user_to_add = User.objects.get(email=email)
+        except User.DoesNotExist:
+            return Response({'error': f'No user found with email {email}. They must register first.'}, status=status.HTTP_404_NOT_FOUND)
+            
+        document.collaborators.add(user_to_add)
+        return Response({'success': True, 'message': f'Document shared with {email}.'})
+
+    @action(detail=True, methods=['post'])
+    def unshare(self, request, pk=None):
+        document = self.get_object()
+        if document.user != request.user:
+            return Response({'error': 'Only the document owner can manage collaborators.'}, status=status.HTTP_403_FORBIDDEN)
+            
+        email = request.data.get('email')
+        if not email:
+            return Response({'error': 'Email is required.'}, status=status.HTTP_400_BAD_REQUEST)
+            
+        try:
+            user_to_remove = User.objects.get(email=email)
+        except User.DoesNotExist:
+            return Response({'error': 'User not found.'}, status=status.HTTP_404_NOT_FOUND)
+            
+        document.collaborators.remove(user_to_remove)
+        return Response({'success': True, 'message': f'Collaborator {email} removed.'})
+
+    @action(detail=True, methods=['get'])
+    def collaborators(self, request, pk=None):
+        document = self.get_object()
+        collabs = document.collaborators.all()
+        return Response(UserSerializer(collabs, many=True).data)
+
+    @action(detail=True, methods=['post'])
+    def heartbeat(self, request, pk=None):
+        document = self.get_object()
+        user = request.user
+        
+        from django.utils import timezone
+        from datetime import timedelta
+        
+        presence, created = DocumentPresence.objects.get_or_create(document=document, user=user)
+        presence.last_active = timezone.now()
+        presence.save()
+        
+        # Clean up stale presence (older than 15s)
+        cutoff_presence = timezone.now() - timedelta(seconds=15)
+        DocumentPresence.objects.filter(document=document, last_active__lt=cutoff_presence).delete()
+        
+        # Clean up stale locks (older than 20s)
+        cutoff_locks = timezone.now() - timedelta(seconds=20)
+        SectionLock.objects.filter(section__document=document, locked_at__lt=cutoff_locks).delete()
+        
+        # Get active users
+        active_presences = DocumentPresence.objects.filter(document=document)
+        active_users = [UserSerializer(p.user).data for p in active_presences]
+        
+        # Get active locks
+        active_locks = SectionLock.objects.filter(section__document=document)
+        locks_data = {}
+        for lock in active_locks:
+            locks_data[lock.section_id] = {
+                'email': lock.user.email,
+                'name': f"{lock.user.first_name} {lock.user.last_name}".strip() or lock.user.username,
+                'locked_at': lock.locked_at.isoformat()
+            }
+            
+        return Response({
+            'active_users': active_users,
+            'locks': locks_data
+        })
+
 
 class SectionViewSet(viewsets.ModelViewSet):
     queryset = Section.objects.all()
@@ -248,7 +333,8 @@ class SectionViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        user_docs = Document.objects.filter(user=self.request.user)
+        from django.db.models import Q
+        user_docs = Document.objects.filter(Q(user=self.request.user) | Q(collaborators=self.request.user)).distinct()
         qs = super().get_queryset().filter(document__in=user_docs)
         doc_id = self.request.query_params.get('document')
         if doc_id:
@@ -262,6 +348,43 @@ class SectionViewSet(viewsets.ModelViewSet):
                 raise ValueError("Content too long")
             serializer.validated_data['content'] = sanitize_html(content)
         serializer.save()
+
+    @action(detail=True, methods=['post'])
+    def lock(self, request, pk=None):
+        section = self.get_object()
+        user = request.user
+        from .models import SectionLock
+        from django.utils import timezone
+        from datetime import timedelta
+        
+        lock = SectionLock.objects.filter(section=section).first()
+        if lock:
+            if lock.user == user:
+                lock.locked_at = timezone.now()
+                lock.save()
+                return Response({'locked': True, 'owner': True})
+            
+            # Check if expired (20s)
+            if lock.locked_at < timezone.now() - timedelta(seconds=20):
+                lock.delete()
+            else:
+                return Response({
+                    'locked': False,
+                    'owner': False,
+                    'message': f"Section is locked by {lock.user.first_name or lock.user.username}"
+                }, status=status.HTTP_423_LOCKED)
+                
+        SectionLock.objects.create(section=section, user=user)
+        return Response({'locked': True, 'owner': True})
+
+    @action(detail=True, methods=['post'])
+    def unlock(self, request, pk=None):
+        section = self.get_object()
+        user = request.user
+        from .models import SectionLock
+        
+        SectionLock.objects.filter(section=section, user=user).delete()
+        return Response({'unlocked': True})
 
     @action(detail=True, methods=['post'])
     def move(self, request, pk=None):
@@ -294,13 +417,14 @@ class AuthorViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        user_docs = Document.objects.filter(user=self.request.user)
+        from django.db.models import Q
+        user_docs = Document.objects.filter(Q(user=self.request.user) | Q(collaborators=self.request.user)).distinct()
         return super().get_queryset().filter(document__in=user_docs)
 
     def perform_create(self, serializer):
         doc = serializer.validated_data.get('document')
-        if doc.user != self.request.user:
-            raise PermissionError("Cannot add authors to another user's document")
+        if doc.user != self.request.user and not doc.collaborators.filter(id=self.request.user.id).exists():
+            raise PermissionError("Cannot add authors to this document")
         serializer.save()
 
     def create(self, request, *args, **kwargs):
@@ -315,10 +439,11 @@ class PaperImageViewSet(viewsets.ModelViewSet):
     queryset = PaperImage.objects.all()
     serializer_class = PaperImageSerializer
     permission_classes = [IsAuthenticated]
-    parser_classes = [MultiPartParser, FormParser]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def get_queryset(self):
-        user_docs = Document.objects.filter(user=self.request.user)
+        from django.db.models import Q
+        user_docs = Document.objects.filter(Q(user=self.request.user) | Q(collaborators=self.request.user)).distinct()
         qs = super().get_queryset().filter(document__in=user_docs)
         doc_id = self.request.query_params.get('document')
         if doc_id:
@@ -327,8 +452,8 @@ class PaperImageViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         doc = serializer.validated_data.get('document')
-        if doc.user != self.request.user:
-            raise PermissionError("Cannot add images to another user's document")
+        if doc.user != self.request.user and not doc.collaborators.filter(id=self.request.user.id).exists():
+            raise PermissionError("Cannot add images to this document")
 
         # Server-side file validation
         image_file = self.request.FILES.get('image')
@@ -362,7 +487,8 @@ class ReferenceViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        user_docs = Document.objects.filter(user=self.request.user)
+        from django.db.models import Q
+        user_docs = Document.objects.filter(Q(user=self.request.user) | Q(collaborators=self.request.user)).distinct()
         qs = super().get_queryset().filter(document__in=user_docs)
         doc_id = self.request.query_params.get('document')
         if doc_id:
@@ -371,8 +497,8 @@ class ReferenceViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         doc = serializer.validated_data.get('document')
-        if doc.user != self.request.user:
-            raise PermissionError("Cannot add references to another user's document")
+        if doc.user != self.request.user and not doc.collaborators.filter(id=self.request.user.id).exists():
+            raise PermissionError("Cannot add references to this document")
         bibtex = serializer.validated_data.get('bibtex', '')
         if len(bibtex) > MAX_BIBTEX_LENGTH:
             raise ValueError("BibTeX content too long")
@@ -717,7 +843,7 @@ def get_latex_source(request, doc_id):
     """Return the LaTeX source code for live preview"""
     try:
         document = Document.objects.get(id=doc_id)
-        if document.user and document.user != request.user:
+        if document.user and document.user != request.user and not document.collaborators.filter(id=request.user.id).exists():
             return Response({'error': 'Not found'}, status=404)
         latex_source = generate_latex_source(document)
         return Response({'latex': latex_source})
@@ -800,7 +926,7 @@ def export_pdf(request, doc_id):
             credit.save()
 
         document = Document.objects.get(id=doc_id)
-        if document.user and document.user != request.user:
+        if document.user and document.user != request.user and not document.collaborators.filter(id=request.user.id).exists():
             return Response({'error': 'Not found'}, status=404)
         latex_source = generate_latex_source(document)
 
@@ -940,7 +1066,7 @@ def export_latex(request, doc_id):
             credit.save()
 
         document = Document.objects.get(id=doc_id)
-        if document.user and document.user != request.user:
+        if document.user and document.user != request.user and not document.collaborators.filter(id=request.user.id).exists():
             return Response({'error': 'Not found'}, status=404)
         latex_source = generate_latex_source(document)
 
@@ -991,7 +1117,8 @@ class PaperTableViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        user_docs = Document.objects.filter(user=self.request.user)
+        from django.db.models import Q
+        user_docs = Document.objects.filter(Q(user=self.request.user) | Q(collaborators=self.request.user)).distinct()
         qs = super().get_queryset().filter(document__in=user_docs)
         doc_id = self.request.query_params.get('document')
         if doc_id:
@@ -1000,8 +1127,8 @@ class PaperTableViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         doc = serializer.validated_data.get('document')
-        if doc.user != self.request.user:
-            raise PermissionError("Cannot add tables to another user's document")
+        if doc.user != self.request.user and not doc.collaborators.filter(id=self.request.user.id).exists():
+            raise PermissionError("Cannot add tables to this document")
         serializer.save()
 
 
@@ -1011,7 +1138,8 @@ class CommentViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        user_docs = Document.objects.filter(user=self.request.user)
+        from django.db.models import Q
+        user_docs = Document.objects.filter(Q(user=self.request.user) | Q(collaborators=self.request.user)).distinct()
         qs = super().get_queryset().filter(document__in=user_docs)
         doc_id = self.request.query_params.get('document')
         if doc_id:
@@ -1020,8 +1148,8 @@ class CommentViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         doc = serializer.validated_data.get('document')
-        if doc.user != self.request.user:
-            raise PermissionError("Cannot add comments to another user's document")
+        if doc.user != self.request.user and not doc.collaborators.filter(id=self.request.user.id).exists():
+            raise PermissionError("Cannot add comments to this document")
         text = serializer.validated_data.get('text', '')
         if len(text) > 5000:
             raise ValueError("Comment too long (max 5000 chars)")

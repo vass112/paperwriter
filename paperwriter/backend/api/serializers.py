@@ -9,7 +9,7 @@ class ReferenceSerializer(serializers.ModelSerializer):
     class Meta:
         model = Reference
         fields = ['id', 'document', 'citation_key', 'description', 'bibtex', 'order', 'created_at']
-        read_only_fields = ['created_at', 'document']
+        read_only_fields = ['created_at']
         extra_kwargs = {
             'citation_key': {'max_length': 100},
             'description': {'max_length': 200},
@@ -46,7 +46,7 @@ class PaperTableSerializer(serializers.ModelSerializer):
     class Meta:
         model = PaperTable
         fields = ['id', 'document', 'section', 'caption', 'label', 'style', 'content', 'order', 'created_at']
-        read_only_fields = ['created_at', 'document']
+        read_only_fields = ['created_at']
         extra_kwargs = {
             'caption': {'max_length': 500},
             'label': {'max_length': 100},
@@ -58,7 +58,7 @@ class CommentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Comment
         fields = ['id', 'document', 'section', 'author_name', 'text', 'quote', 'resolved', 'created_at']
-        read_only_fields = ['created_at', 'author_name', 'document']
+        read_only_fields = ['created_at', 'author_name']
         extra_kwargs = {
             'text': {'max_length': 5000},
             'quote': {'max_length': 500},
@@ -71,7 +71,7 @@ class SectionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Section
         fields = ['id', 'title', 'content', 'order', 'section_type', 'parent', 'subsections']
-        read_only_fields = ['document']
+        read_only_fields = []
         extra_kwargs = {
             'title': {'max_length': 200},
             'content': {'max_length': 100000},
@@ -96,7 +96,7 @@ class AuthorSerializer(serializers.ModelSerializer):
     class Meta:
         model = Author
         fields = ['id', 'document', 'name', 'department', 'organization', 'city', 'country', 'email', 'order']
-        read_only_fields = ['document']
+        read_only_fields = []
         extra_kwargs = {
             'name': {'max_length': 200},
             'department': {'max_length': 200},
@@ -122,7 +122,7 @@ class PaperImageSerializer(serializers.ModelSerializer):
     class Meta:
         model = PaperImage
         fields = ['id', 'document', 'section', 'image', 'image_url', 'caption', 'label', 'width', 'order', 'uploaded_at']
-        read_only_fields = ['uploaded_at', 'image_url', 'document']
+        read_only_fields = ['uploaded_at', 'image_url']
         extra_kwargs = {
             'caption': {'max_length': 500},
             'label': {'max_length': 100},
@@ -166,6 +166,8 @@ class PaperImageSerializer(serializers.ModelSerializer):
 
 
 class DocumentSerializer(serializers.ModelSerializer):
+    user = UserSerializer(read_only=True)
+    collaborators = UserSerializer(many=True, read_only=True)
     sections = serializers.SerializerMethodField()
     authors = AuthorSerializer(many=True, read_only=True)
     images = PaperImageSerializer(many=True, read_only=True)
@@ -175,8 +177,8 @@ class DocumentSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Document
-        fields = ['id', 'title', 'index_terms', 'created_at', 'updated_at', 'sections', 'authors', 'images', 'references', 'tables', 'comments']
-        read_only_fields = ['created_at', 'updated_at', 'user']
+        fields = ['id', 'user', 'collaborators', 'title', 'index_terms', 'created_at', 'updated_at', 'sections', 'authors', 'images', 'references', 'tables', 'comments']
+        read_only_fields = ['created_at', 'updated_at']
         extra_kwargs = {
             'title': {'max_length': 200},
             'index_terms': {'max_length': 500},

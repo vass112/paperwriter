@@ -128,6 +128,10 @@ let activeEditorIdForRef = null;
 // User Profile State
 let userProfile = null;
 
+// Collaboration State
+let heartbeatInterval = null;
+let activeLocks = {};
+
 // CSRF helper for Django
 function getCsrfToken() {
     if (window.csrfToken) return window.csrfToken;
@@ -560,6 +564,10 @@ async function exportPdf(buttonId) {
 async function loadDocument(id) {
     try {
         currentDocId = id;
+        startHeartbeat();
+        const shareBtn = document.getElementById('share-doc-btn');
+        if (shareBtn) shareBtn.style.display = 'flex';
+
         await fetchReferencesSilent();
         await fetchTablesSilent();
         await fetchComments();
@@ -763,6 +771,10 @@ async function loadDocument(id) {
                     },
                     onFocus: () => {
                         lastFocusedEditorId = section.id;
+                        acquireSectionLock(section.id);
+                    },
+                    onBlur: () => {
+                        releaseSectionLock(section.id);
                     },
                     onSelectionUpdate: ({ editor }) => {
                         handleSelectionUpdate(section.id, editor);
@@ -3688,6 +3700,14 @@ window.loadDashboard = async function() {
     document.getElementById('dashboard-view').style.display = 'flex';
     if(typeof toggleHeaderVisibility === 'function') toggleHeaderVisibility(true);
     
+    // Hide share UI when on dashboard
+    const shareBtn = document.getElementById('share-doc-btn');
+    if (shareBtn) shareBtn.style.display = 'none';
+    const collabAvatars = document.getElementById('collab-avatars-group');
+    if (collabAvatars) collabAvatars.style.display = 'none';
+    
+    stopHeartbeat();
+    
     // Autofill feedback form if user profile is available
     if (window.userProfile) {
         const feedbackName = document.getElementById('feedback-name');
@@ -3717,19 +3737,24 @@ window.loadDashboard = async function() {
                 loadDocument(doc.id);
             };
             
+            const isShared = doc.user && userProfile && doc.user.id !== userProfile.id;
+            const sharedBadge = isShared ? `<span style="font-size: 10px; font-weight:600; padding: 2px 6px; background:#eff6ff; color:#3b82f6; border-radius:4px; margin-left: 8px;">Shared</span>` : '';
+            
             const dateStr = new Date(doc.updated_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
             
             card.innerHTML = `
                 <div>
-                    <h3 class="doc-card-title">${doc.title || 'Untitled Paper'}</h3>
-                    <div class="doc-card-meta">${doc.index_terms || 'No tags'}</div>
+                    <h3 class="doc-card-title">${escapeHtml(doc.title) || 'Untitled Paper'}${sharedBadge}</h3>
+                    <div class="doc-card-meta">${escapeHtml(doc.index_terms) || 'No tags'}</div>
                 </div>
                 <div class="doc-card-footer">
                     <span class="doc-card-date">Last modified: ${dateStr}</span>
                     <div class="doc-card-actions">
+                        ${!isShared ? `
                         <button class="doc-card-btn delete" onclick="event.stopPropagation(); window.deleteDocument(${doc.id}, '${doc.title.replace(/'/g, "\\'")}')" title="Delete Paper">
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
                         </button>
+                        ` : ''}
                     </div>
                 </div>
             `;
@@ -4046,5 +4071,294 @@ window.submitDashboardFeedback = async function(event) {
         statusMsg.style.color = '#ef4444';
         statusMsg.style.background = '#fef2f2';
         statusMsg.textContent = 'Network error. Please check your connection.';
+    }
+};
+
+// ============================================================
+// COLLABORATIVE EDITING & PRESENCE LOGIC
+// ============================================================
+
+function startHeartbeat() {
+    if (heartbeatInterval) clearInterval(heartbeatInterval);
+    sendHeartbeat();
+    heartbeatInterval = setInterval(sendHeartbeat, 5000);
+}
+
+function stopHeartbeat() {
+    if (heartbeatInterval) {
+        clearInterval(heartbeatInterval);
+        heartbeatInterval = null;
+    }
+}
+
+async function sendHeartbeat() {
+    if (!currentDocId) return;
+    try {
+        const res = await fetch(`/api/documents/${currentDocId}/heartbeat/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken()
+            }
+        });
+        if (!res.ok) return;
+        
+        const data = await res.json();
+        renderCollaboratorAvatars(data.active_users);
+        updateSectionLocks(data.locks);
+    } catch (e) {
+        console.error("Heartbeat error:", e);
+    }
+}
+
+function renderCollaboratorAvatars(users) {
+    const container = document.getElementById('collab-avatars-group');
+    if (!container) return;
+    
+    // Filter out self so we only show others
+    const otherUsers = users.filter(u => u.email !== userProfile.email);
+    
+    if (otherUsers.length === 0) {
+        container.style.display = 'none';
+        container.innerHTML = '';
+        return;
+    }
+    
+    container.style.display = 'flex';
+    container.innerHTML = otherUsers.map((user, idx) => {
+        const initials = user.first_name ? user.first_name[0] + (user.last_name ? user.last_name[0] : '') : user.email[0].toUpperCase();
+        const fullName = `${user.first_name} ${user.last_name}`.trim() || user.username;
+        const colorClass = `collab-avatar-${(idx % 5) + 1}`;
+        return `<div class="collab-avatar ${colorClass}" title="${escapeHtml(fullName)} (${escapeHtml(user.email)})">${escapeHtml(initials)}</div>`;
+    }).join('');
+}
+
+function updateSectionLocks(locks) {
+    activeLocks = locks || {};
+    
+    for (const [sectionId, editor] of Object.entries(editors)) {
+        const wrapper = document.getElementById(`section-${sectionId}`);
+        if (!wrapper) continue;
+        
+        const lockInfo = activeLocks[sectionId];
+        
+        if (lockInfo && lockInfo.email !== userProfile.email) {
+            // Locked by someone else
+            if (!wrapper.classList.contains('locked')) {
+                wrapper.classList.add('locked');
+                editor.setEditable(false);
+            }
+            
+            let banner = wrapper.querySelector('.section-lock-banner');
+            if (!banner) {
+                banner = document.createElement('div');
+                banner.className = 'section-lock-banner';
+                banner.innerHTML = `
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="display:block; margin-right: 4px;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                    <span>${escapeHtml(lockInfo.name)} is editing</span>
+                `;
+                wrapper.appendChild(banner);
+            } else {
+                banner.querySelector('span').textContent = `${lockInfo.name} is editing`;
+            }
+            
+            const titleInput = wrapper.querySelector('.section-title-input');
+            if (titleInput) titleInput.disabled = true;
+        } else {
+            // Unlocked or locked by self
+            if (wrapper.classList.contains('locked')) {
+                wrapper.classList.remove('locked');
+                editor.setEditable(true);
+                
+                const banner = wrapper.querySelector('.section-lock-banner');
+                if (banner) banner.remove();
+            }
+            
+            const titleInput = wrapper.querySelector('.section-title-input');
+            if (titleInput) titleInput.disabled = false;
+        }
+    }
+}
+
+async function acquireSectionLock(sectionId) {
+    if (!currentDocId) return;
+    try {
+        const res = await fetch(`/api/sections/${sectionId}/lock/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken()
+            }
+        });
+        if (res.status === 423) {
+            // Locked by someone else
+            const data = await res.json();
+            const editor = editors[sectionId];
+            if (editor) {
+                editor.setEditable(false);
+                const wrapper = document.getElementById(`section-${sectionId}`);
+                if (wrapper) {
+                    wrapper.classList.add('locked');
+                    let banner = wrapper.querySelector('.section-lock-banner');
+                    if (!banner) {
+                        banner = document.createElement('div');
+                        banner.className = 'section-lock-banner';
+                        banner.innerHTML = `
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="display:block; margin-right: 4px;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                            <span>Locked</span>
+                        `;
+                        wrapper.appendChild(banner);
+                    }
+                }
+            }
+        } else if (res.ok) {
+            // Successfully locked
+            const wrapper = document.getElementById(`section-${sectionId}`);
+            if (wrapper && wrapper.classList.contains('locked')) {
+                wrapper.classList.remove('locked');
+                const banner = wrapper.querySelector('.section-lock-banner');
+                if (banner) banner.remove();
+                const editor = editors[sectionId];
+                if (editor) editor.setEditable(true);
+            }
+        }
+    } catch (e) {
+        console.error("Lock error:", e);
+    }
+}
+
+async function releaseSectionLock(sectionId) {
+    if (!currentDocId) return;
+    try {
+        await fetch(`/api/sections/${sectionId}/unlock/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken()
+            }
+        });
+    } catch (e) {
+        console.error("Unlock error:", e);
+    }
+}
+
+window.openShareModal = async function() {
+    const modal = document.getElementById('share-modal');
+    if (!modal) return;
+    modal.classList.add('active');
+    modal.style.opacity = '1';
+    modal.style.pointerEvents = 'auto';
+    document.getElementById('share-email-input').value = '';
+    document.getElementById('share-error').style.display = 'none';
+    await loadCollaborators();
+};
+
+window.closeShareModal = function() {
+    const modal = document.getElementById('share-modal');
+    if (modal) {
+        modal.classList.remove('active');
+        modal.style.opacity = '0';
+        modal.style.pointerEvents = 'none';
+    }
+};
+
+async function loadCollaborators() {
+    if (!currentDocId) return;
+    try {
+        const docRes = await fetch(`/api/documents/${currentDocId}/`);
+        const doc = await docRes.json();
+        const isOwner = doc.user && userProfile && doc.user.id === userProfile.id;
+        
+        const collabRes = await fetch(`/api/documents/${currentDocId}/collaborators/`);
+        const collabs = await collabRes.json();
+        
+        const listContainer = document.getElementById('share-collabs-list');
+        if (!listContainer) return;
+        
+        const ownerName = doc.user ? `${doc.user.first_name} ${doc.user.last_name}`.trim() || doc.user.username : 'Unknown';
+        const ownerEmail = doc.user ? doc.user.email : '';
+        
+        let html = `
+            <div class="share-collab-item">
+                <div class="collab-info">
+                    <span style="font-weight:600;">${escapeHtml(ownerName)}</span>
+                    <span class="collab-email">${escapeHtml(ownerEmail)}</span>
+                </div>
+                <span class="owner-badge">Owner</span>
+            </div>
+        `;
+        
+        collabs.forEach(collab => {
+            const fullName = `${collab.first_name} ${collab.last_name}`.trim() || collab.username;
+            html += `
+                <div class="share-collab-item">
+                    <div class="collab-info">
+                        <span style="font-weight:600;">${escapeHtml(fullName)}</span>
+                        <span class="collab-email">${escapeHtml(collab.email)}</span>
+                    </div>
+                    ${isOwner ? `<button class="btn-remove" onclick="removeCollaborator('${escapeHtml(collab.email)}')">Remove</button>` : ''}
+                </div>
+            `;
+        });
+        
+        listContainer.innerHTML = html;
+    } catch (e) {
+        console.error("Failed to load collaborators:", e);
+    }
+}
+
+window.addCollaborator = async function() {
+    const emailInput = document.getElementById('share-email-input');
+    const email = emailInput.value.trim();
+    const errorEl = document.getElementById('share-error');
+    
+    if (!email) return;
+    errorEl.style.display = 'none';
+    
+    try {
+        const res = await fetch(`/api/documents/${currentDocId}/share/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken()
+            },
+            body: JSON.stringify({ email })
+        });
+        
+        const data = await res.json();
+        if (res.ok) {
+            emailInput.value = '';
+            await loadCollaborators();
+        } else {
+            errorEl.style.display = 'block';
+            errorEl.textContent = data.error || 'Failed to add collaborator.';
+        }
+    } catch (e) {
+        errorEl.style.display = 'block';
+        errorEl.textContent = 'Network error.';
+    }
+};
+
+window.removeCollaborator = async function(email) {
+    if (!await window.confirmDelete(`Remove ${email} from collaborators?`, 'Remove')) return;
+    
+    try {
+        const res = await fetch(`/api/documents/${currentDocId}/unshare/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken()
+            },
+            body: JSON.stringify({ email })
+        });
+        
+        if (res.ok) {
+            await loadCollaborators();
+        } else {
+            const data = await res.json();
+            alert(data.error || 'Failed to remove collaborator.');
+        }
+    } catch (e) {
+        alert('Network error.');
     }
 };

@@ -6,6 +6,7 @@ from django.utils import timezone
 
 class Document(models.Model):
     user = models.ForeignKey(User, related_name='documents', on_delete=models.CASCADE, null=True, blank=True)
+    collaborators = models.ManyToManyField(User, related_name='shared_documents', blank=True)
     title = models.CharField(max_length=200, default="Untitled Paper")
     index_terms = models.CharField(max_length=500, default="component, formatting, style, styling, insert", blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -13,6 +14,7 @@ class Document(models.Model):
 
     def __str__(self):
         return self.title
+
 
 class Author(models.Model):
     document = models.ForeignKey(Document, related_name='authors', on_delete=models.CASCADE)
@@ -182,6 +184,27 @@ class ContactInquiry(models.Model):
 
     def __str__(self):
         return f"{self.name} - {self.institution}"
+
+
+class DocumentPresence(models.Model):
+    document = models.ForeignKey(Document, on_delete=models.CASCADE, related_name='presences')
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    last_active = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('document', 'user')
+
+    def __str__(self):
+        return f"{self.user.username} - {self.document.title}"
+
+
+class SectionLock(models.Model):
+    section = models.OneToOneField(Section, on_delete=models.CASCADE, related_name='lock')
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    locked_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Lock on {self.section.title} by {self.user.username}"
 
 
 class UserProfile(models.Model):
