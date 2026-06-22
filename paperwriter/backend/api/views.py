@@ -66,6 +66,7 @@ def home(request):
 
 @api_view(['POST'])
 @throttle_classes([UserRateThrottle])
+@permission_classes([AllowAny])
 def dev_login(request):
     """Bypass for local development so we don't need to configure Google OAuth origins for every local port."""
     if not settings.DEBUG:
@@ -88,6 +89,7 @@ def dev_login(request):
 
 @api_view(['POST'])
 @throttle_classes([AnonRateThrottle, UserRateThrottle])
+@permission_classes([AllowAny])
 def google_auth(request):
     token = request.data.get('token')
     if not token:
