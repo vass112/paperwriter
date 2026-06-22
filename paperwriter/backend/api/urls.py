@@ -3,7 +3,8 @@ from rest_framework import routers
 from .views import (
     DocumentViewSet, AuthorViewSet, PaperImageViewSet, ReferenceViewSet, SectionViewSet,
     PaperTableViewSet, CommentViewSet, process_ai_command, process_ai_equation, fetch_doi,
-    export_latex, get_latex_source, export_pdf, google_auth, dev_login, logout_user, user_profile, delete_account
+    export_latex, get_latex_source, export_pdf, google_auth, dev_login, logout_user, user_profile, delete_account,
+    get_credits, buy_credits, payment_callback, redeem_code, contact_inquiry
 )
 
 router = routers.DefaultRouter()
@@ -28,4 +29,9 @@ urlpatterns = [
     path('document/<int:doc_id>/latex', get_latex_source, name='get_latex_source'),
     path('document/<int:doc_id>/export/pdf', export_pdf, name='export_pdf'),
     path('document/<int:doc_id>/export/latex', export_latex, name='export_latex'),
+    path('payments/buy/', buy_credits, name='buy_credits'),
+    path('payments/callback/', payment_callback, name='payment_callback'),
+    path('payments/redeem/', redeem_code, name='redeem_code'),
+    path('payments/contact/', contact_inquiry, name='contact_inquiry'),
+    path('payments/credits/', get_credits, name='get_credits'),
 ]

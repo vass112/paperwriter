@@ -132,6 +132,7 @@
                 <button class="header-menu-btn" id="sidebar-toggle" title="Toggle Sidebar">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
                 </button>
+                <button class="header-menu-btn" id="upgrade-btn" style="background: linear-gradient(135deg, var(--brand-600), var(--brand-400)); color: white; border: none; padding: 6px 12px; border-radius: 6px; font-weight: 600; font-size: 13px; margin-right: 12px; cursor: pointer; box-shadow: 0 2px 4px rgba(79, 70, 229, 0.2); transition: all 0.2s ease;" onclick="openPricingModal()" onmouseover="this.style.transform='translateY(-1px)'; this.style.boxShadow='0 4px 8px rgba(79, 70, 229, 0.3)';" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 2px 4px rgba(79, 70, 229, 0.2)';">Upgrade</button>
                 <div class="header-avatar" id="profile-avatar-btn" style="cursor: pointer; transition: transform 0.2s;" onclick="openProfileModal()" title="Profile & Settings">JD</div>
             </div>
         </header>
@@ -896,6 +897,71 @@
         </footer>
     </div>
     {% endif %}
+
+    <!-- ===== PRICING MODAL ===== -->
+    <div id="pricing-modal" class="pricing-modal-overlay" style="display: none;">
+        <div class="pricing-modal-content">
+            <button class="pricing-close-btn" onclick="closePricingModal()">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+            <div class="pricing-header">
+                <h2>Upgrade PaperWriter</h2>
+                <p>Unlock premium IEEE exports and advanced features.</p>
+            </div>
+            
+            <div class="pricing-balance-section">
+                <div class="balance-icon">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+                </div>
+                <div class="balance-info">
+                    <span class="balance-label">Available Export Credits</span>
+                    <span class="balance-value" id="ui-credit-balance">Loading...</span>
+                </div>
+            </div>
+
+            <div class="pricing-cards-container">
+                <!-- Razorpay Buy Card -->
+                <div class="pricing-card premium-card">
+                    <div class="card-badge">Most Popular</div>
+                    <h3>Pro Pack</h3>
+                    <div class="price">
+                        <span class="currency">₹</span><span class="amount">149</span>
+                    </div>
+                    <ul class="features-list">
+                        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg> 3 IEEE PDF / LaTeX Exports</li>
+                        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg> High-Resolution Images</li>
+                        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg> No Expiry Date</li>
+                    </ul>
+                    <button class="btn-premium w-full" onclick="window.location.href='/api/payments/buy/'">Buy Now</button>
+                </div>
+
+                <!-- Redeem Code Card -->
+                <div class="pricing-card secondary-card">
+                    <h3>Redeem Code</h3>
+                    <p class="card-desc">Have a promo or conference code? Enter it below to claim your credits.</p>
+                    <div class="redeem-input-group">
+                        <input type="text" id="redeem-code-input" placeholder="e.g. CONF2026-ABC123" />
+                        <button class="btn-primary" onclick="redeemCode()">Redeem</button>
+                    </div>
+                    <div id="redeem-message" style="margin-top: 8px; font-size: 13px; display: none;"></div>
+                </div>
+            </div>
+
+            <div class="pricing-footer">
+                <h4>Institutional Access</h4>
+                <p>Need unlimited access for your university or research lab?</p>
+                <button class="btn-ghost" onclick="toggleContactForm()">Get a Quote</button>
+                
+                <div id="contact-form-container" style="display: none; margin-top: 16px; text-align: left;">
+                    <input type="text" id="contact-name" class="modal-input" placeholder="Full Name" style="margin-bottom: 8px;">
+                    <input type="email" id="contact-email" class="modal-input" placeholder="Work/University Email" style="margin-bottom: 8px;">
+                    <input type="text" id="contact-institution" class="modal-input" placeholder="Institution Name" style="margin-bottom: 8px;">
+                    <textarea id="contact-message" class="modal-input" placeholder="How many users need access?" style="min-height: 80px; margin-bottom: 12px;"></textarea>
+                    <button class="btn-primary w-full" onclick="submitContactForm()">Send Request</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- Scripts -->
     <script type="module" src="/static/js/app.js?v=48"></script>

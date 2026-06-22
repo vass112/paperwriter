@@ -5,8 +5,12 @@ from rest_framework.decorators import api_view, action, permission_classes, thro
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnly, AllowAny
 from rest_framework.throttling import UserRateThrottle, AnonRateThrottle
-from .models import Document, Section, Author, PaperImage, Reference, PaperTable, Comment
+from .models import Document, Section, Author, PaperImage, Reference, PaperTable, Comment, DownloadCredit, PaymentTransaction, RedeemCode, RedeemCodeUsage, ContactInquiry
 from .serializers import DocumentSerializer, SectionSerializer, AuthorSerializer, PaperImageSerializer, ReferenceSerializer, PaperTableSerializer, CommentSerializer
+from django.db import transaction
+import hmac
+import hashlib
+from django.shortcuts import redirect
 import google.generativeai as genai
 from django.conf import settings
 from django.db.models import F
@@ -787,6 +791,15 @@ def compile_pdf_online(latex_source, document, cls_source):
 def export_pdf(request, doc_id):
     """Compile LaTeX to PDF and return it"""
     try:
+    try:
+        with transaction.atomic():
+            credit, _ = DownloadCredit.objects.get_or_create(user=request.user)
+            credit = DownloadCredit.objects.select_for_update().get(id=credit.id)
+            if credit.remaining < 1:
+                return Response({"error": "No downloads remaining", "buy_url": "/api/payments/buy/"}, status=402)
+            credit.remaining -= 1
+            credit.save()
+
         document = Document.objects.get(id=doc_id)
         if document.user and document.user != request.user:
             return Response({'error': 'Not found'}, status=404)
@@ -865,6 +878,12 @@ def export_pdf(request, doc_id):
                     stdout = result.stdout.decode('utf-8', errors='replace')
                     stderr = result.stderr.decode('utf-8', errors='replace')
                     print(f"PDF compilation failed.\nSTDOUT: {stdout}\nSTDERR: {stderr}")
+                    
+                    with transaction.atomic():
+                        credit = DownloadCredit.objects.select_for_update().get(user=request.user)
+                        credit.remaining += 1
+                        credit.save()
+
                     return Response({
                         'error': 'PDF compilation failed',
                         'log': stderr,
@@ -880,6 +899,11 @@ def export_pdf(request, doc_id):
                 response['Content-Disposition'] = f'attachment; filename=paper_{doc_id}.pdf'
                 return response
 
+            with transaction.atomic():
+                credit = DownloadCredit.objects.select_for_update().get(user=request.user)
+                credit.remaining += 1
+                credit.save()
+
             return Response({
                 'error': 'LaTeX compilation failed',
                 'message': 'Local compiler not found and online fallback compilation failed.'
@@ -892,6 +916,12 @@ def export_pdf(request, doc_id):
                 response = HttpResponse(pdf_content, content_type='application/pdf')
                 response['Content-Disposition'] = f'attachment; filename=paper_{doc_id}.pdf'
                 return response
+            
+            with transaction.atomic():
+                credit = DownloadCredit.objects.select_for_update().get(user=request.user)
+                credit.remaining += 1
+                credit.save()
+
             return Response({'error': 'Compilation timeout'}, status=500)
 
     except Document.DoesNotExist:
@@ -902,6 +932,14 @@ def export_pdf(request, doc_id):
 def export_latex(request, doc_id):
     """Export LaTeX project as ZIP"""
     try:
+        with transaction.atomic():
+            credit, _ = DownloadCredit.objects.get_or_create(user=request.user)
+            credit = DownloadCredit.objects.select_for_update().get(id=credit.id)
+            if credit.remaining < 1:
+                return Response({"error": "No downloads remaining", "buy_url": "/api/payments/buy/"}, status=402)
+            credit.remaining -= 1
+            credit.save()
+
         document = Document.objects.get(id=doc_id)
         if document.user and document.user != request.user:
             return Response({'error': 'Not found'}, status=404)
@@ -935,7 +973,17 @@ def export_latex(request, doc_id):
         return response
 
     except Document.DoesNotExist:
+        with transaction.atomic():
+            credit = DownloadCredit.objects.select_for_update().get(user=request.user)
+            credit.remaining += 1
+            credit.save()
         return Response({'error': 'Document not found'}, status=404)
+    except Exception as e:
+        with transaction.atomic():
+            credit = DownloadCredit.objects.select_for_update().get(user=request.user)
+            credit.remaining += 1
+            credit.save()
+        return Response({'error': str(e)}, status=500)
 
 
 class PaperTableViewSet(viewsets.ModelViewSet):
@@ -1086,3 +1134,165 @@ def fetch_doi(request):
         return Response({'error': f"DOI resolver returned error: {e.code}"}, status=400)
     except Exception as e:
         return Response({'error': 'Failed to fetch DOI'}, status=500)
+
+
+# === PAYMENT & CREDITS ===
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_credits(request):
+    try:
+        credit = DownloadCredit.objects.get(user=request.user)
+        return Response({
+            'remaining': credit.remaining,
+            'total_purchased': credit.total_purchased
+        })
+    except DownloadCredit.DoesNotExist:
+        # Fallback to backfill if missing
+        credit = DownloadCredit.objects.create(user=request.user)
+        return Response({
+            'remaining': credit.remaining,
+            'total_purchased': credit.total_purchased
+        })
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def buy_credits(request):
+    if not settings.RAZORPAY_PAGE_ID:
+        return Response({'error': 'Razorpay not configured'}, status=500)
+    
+    callback_url = request.build_absolute_uri('/api/payments/callback/')
+    user_email = request.user.email
+    redirect_url = f"https://rzp.io/pl/{settings.RAZORPAY_PAGE_ID}?callback_url={callback_url}&user_email={user_email}"
+    return redirect(redirect_url)
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def payment_callback(request):
+    payment_id = request.GET.get('razorpay_payment_id')
+    order_id = request.GET.get('razorpay_order_id', '')
+    signature = request.GET.get('razorpay_signature', '')
+    user_email = request.GET.get('user_email', '')
+
+    if not payment_id or not signature:
+        return redirect('/?payment=failed')
+
+    # Verify Signature
+    secret = settings.RAZORPAY_KEY_SECRET
+    msg = f"{order_id}|{payment_id}" if order_id else payment_id
+    generated_signature = hmac.new(
+        secret.encode(),
+        msg.encode(),
+        hashlib.sha256
+    ).hexdigest()
+
+    # In some Razorpay setups without an order_id, signature validation might differ. 
+    # For payment links, Razorpay sends payment_id, payment_link_id, payment_link_reference_id, payment_link_status, signature.
+    # We will assume a basic check, or if order_id is missing, we might need a custom check.
+    # Assuming standard Payment Link callback validation:
+    payment_link_id = request.GET.get('razorpay_payment_link_id', '')
+    payment_link_ref = request.GET.get('razorpay_payment_link_reference_id', '')
+    payment_link_status = request.GET.get('razorpay_payment_link_status', '')
+
+    if payment_link_id:
+        msg = f"{payment_link_id}|{payment_link_ref}|{payment_link_status}|{payment_id}"
+        generated_signature = hmac.new(secret.encode(), msg.encode(), hashlib.sha256).hexdigest()
+
+    if not hmac.compare_digest(generated_signature, signature):
+        return redirect('/?payment=failed')
+
+    user = User.objects.filter(email=user_email).first()
+    if not user:
+        # Create record for unknown user
+        PaymentTransaction.objects.create(
+            razorpay_payment_id=payment_id,
+            razorpay_order_id=order_id,
+            razorpay_signature=signature,
+            amount_inr=14900,
+            credits_granted=3,
+            status='failed',
+            user_email=user_email
+        )
+        return redirect('/?payment=failed&reason=user_not_found')
+
+    try:
+        with transaction.atomic():
+            # Prevent double-crediting
+            if PaymentTransaction.objects.filter(razorpay_payment_id=payment_id).exists():
+                return redirect('/?payment=success')
+
+            PaymentTransaction.objects.create(
+                user=user,
+                razorpay_payment_id=payment_id,
+                razorpay_order_id=order_id,
+                razorpay_signature=signature,
+                amount_inr=14900,
+                credits_granted=3,
+                status='completed',
+                user_email=user_email
+            )
+            
+            credit, _ = DownloadCredit.objects.get_or_create(user=user)
+            credit = DownloadCredit.objects.select_for_update().get(id=credit.id)
+            credit.remaining += 3
+            credit.total_purchased += 3
+            credit.save()
+            
+        return redirect('/?payment=success')
+    except Exception as e:
+        return redirect('/?payment=failed')
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def redeem_code(request):
+    code_str = request.data.get('code', '').strip()
+    if not code_str:
+        return Response({'error': 'Code is required'}, status=400)
+
+    try:
+        with transaction.atomic():
+            code = RedeemCode.objects.select_for_update().get(code__iexact=code_str)
+            
+            if not code.is_valid():
+                return Response({'error': 'Code expired or reached max uses'}, status=400)
+                
+            if RedeemCodeUsage.objects.filter(user=request.user, redeem_code=code).exists():
+                return Response({'error': 'Code already used by you'}, status=400)
+                
+            code.use_count += 1
+            code.save()
+            
+            RedeemCodeUsage.objects.create(user=request.user, redeem_code=code)
+            
+            credit, _ = DownloadCredit.objects.get_or_create(user=request.user)
+            credit = DownloadCredit.objects.select_for_update().get(id=credit.id)
+            credit.remaining += code.credits
+            credit.total_purchased += code.credits
+            credit.save()
+            
+            return Response({
+                'success': True,
+                'credits_added': code.credits,
+                'remaining': credit.remaining
+            })
+    except RedeemCode.DoesNotExist:
+        return Response({'error': 'Invalid code'}, status=404)
+    except Exception as e:
+        return Response({'error': str(e)}, status=500)
+
+@api_view(['POST'])
+@throttle_classes([AnonRateThrottle, UserRateThrottle])
+@permission_classes([AllowAny])
+def contact_inquiry(request):
+    name = request.data.get('name')
+    email = request.data.get('email')
+    institution = request.data.get('institution')
+    message = request.data.get('message')
+    
+    if not all([name, email, institution, message]):
+        return Response({'error': 'All fields are required'}, status=400)
+        
+    ContactInquiry.objects.create(
+        name=name, email=email, institution=institution, message=message
+    )
+    return Response({'success': True})

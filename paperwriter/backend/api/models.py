@@ -2,6 +2,7 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.db.models.signals import post_save
 from django.dispatch import receiver
+from django.utils import timezone
 
 class Document(models.Model):
     user = models.ForeignKey(User, related_name='documents', on_delete=models.CASCADE, null=True, blank=True)
@@ -122,6 +123,66 @@ class Comment(models.Model):
 
     def __str__(self):
         return f"Comment by {self.author_name} on {self.section.title}"
+class DownloadCredit(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='download_credits')
+    remaining = models.PositiveIntegerField(default=1, help_text="Free download given on signup")
+    total_purchased = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+class PaymentTransaction(models.Model):
+    user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='payments')
+    razorpay_payment_id = models.CharField(max_length=100, unique=True)
+    razorpay_order_id = models.CharField(max_length=100, blank=True)
+    razorpay_signature = models.CharField(max_length=500, blank=True)
+    amount_inr = models.PositiveIntegerField(help_text="Amount in paise (14900 = ₹149)")
+    credits_granted = models.PositiveIntegerField(default=3)
+    status = models.CharField(max_length=20, choices=[
+        ('pending', 'Pending'),
+        ('completed', 'Completed'),
+        ('failed', 'Failed'),
+        ('refunded', 'Refunded'),
+    ], default='pending')
+    user_email = models.EmailField(blank=True, help_text="Email at time of purchase")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+class RedeemCode(models.Model):
+    code = models.CharField(max_length=50, unique=True, help_text="e.g., CONF2026-ABC123")
+    credits = models.PositiveIntegerField(default=3, help_text="Number of download credits this code grants")
+    max_uses = models.PositiveIntegerField(default=1, help_text="How many times this code can be used total")
+    use_count = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    notes = models.CharField(max_length=200, blank=True, help_text="Internal note (conference name, promo batch)")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def is_valid(self):
+        return (self.is_active and
+                self.use_count < self.max_uses and
+                (self.expires_at is None or timezone.now() < self.expires_at))
+
+    def __str__(self):
+        return self.code
+
+class RedeemCodeUsage(models.Model):
+    redeem_code = models.ForeignKey(RedeemCode, on_delete=models.CASCADE, related_name='usages')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='redeem_usages')
+    redeemed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('redeem_code', 'user')
+
+class ContactInquiry(models.Model):
+    name = models.CharField(max_length=200)
+    email = models.EmailField()
+    institution = models.CharField(max_length=300)
+    message = models.TextField()
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.name} - {self.institution}"
+
 
 class UserProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
@@ -136,6 +197,7 @@ class UserProfile(models.Model):
 def create_user_profile(sender, instance, created, **kwargs):
     if created:
         UserProfile.objects.create(user=instance)
+        DownloadCredit.objects.create(user=instance)
         
         # Create Sample Document
         doc = Document.objects.create(

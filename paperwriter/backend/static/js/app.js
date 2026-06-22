@@ -506,6 +506,11 @@ async function exportPdf(buttonId) {
 
     try {
         const response = await fetch(`/api/document/${currentDocId}/export/pdf`);
+        if (response.status === 402) {
+            openPricingModal();
+            return;
+        }
+        
         if (response.ok) {
             const blob = await response.blob();
             const url = URL.createObjectURL(blob);
@@ -519,6 +524,10 @@ async function exportPdf(buttonId) {
         } else {
             // Try LaTeX export as fallback
             const latexResp = await fetch(`/api/document/${currentDocId}/export/latex`);
+            if (latexResp.status === 402) {
+                openPricingModal();
+                return;
+            }
             if (latexResp.ok) {
                 const blob = await latexResp.blob();
                 const url = URL.createObjectURL(blob);
@@ -3856,4 +3865,123 @@ window.openPrivacyModal = function() {
 };
 window.closePrivacyModal = function() {
     document.getElementById('privacy-policy-modal').classList.remove('active');
-};;
+};
+
+/* ============================================================
+   PRICING & PAYMENTS LOGIC
+   ============================================================ */
+
+window.openPricingModal = async function() {
+    document.getElementById('pricing-modal').style.display = 'flex';
+    document.getElementById('ui-credit-balance').textContent = 'Loading...';
+    try {
+        const res = await fetch('/api/payments/credits/', {
+            headers: { 'X-CSRFToken': getCsrfToken() }
+        });
+        if (res.ok) {
+            const data = await res.json();
+            document.getElementById('ui-credit-balance').textContent = data.remaining;
+        } else {
+            document.getElementById('ui-credit-balance').textContent = 'Error';
+        }
+    } catch (e) {
+        document.getElementById('ui-credit-balance').textContent = 'Error';
+    }
+};
+
+window.closePricingModal = function() {
+    document.getElementById('pricing-modal').style.display = 'none';
+};
+
+window.redeemCode = async function() {
+    const code = document.getElementById('redeem-code-input').value.trim();
+    const msgEl = document.getElementById('redeem-message');
+    if (!code) {
+        msgEl.style.display = 'block';
+        msgEl.style.color = '#ef4444';
+        msgEl.textContent = 'Please enter a code.';
+        return;
+    }
+    
+    try {
+        const res = await fetch('/api/payments/redeem/', {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken() 
+            },
+            body: JSON.stringify({ code })
+        });
+        const data = await res.json();
+        
+        msgEl.style.display = 'block';
+        if (res.ok && data.success) {
+            msgEl.style.color = '#10b981';
+            msgEl.textContent = `Success! ${data.credits_added} credits added.`;
+            document.getElementById('ui-credit-balance').textContent = data.remaining;
+            document.getElementById('redeem-code-input').value = '';
+        } else {
+            msgEl.style.color = '#ef4444';
+            msgEl.textContent = data.error || 'Failed to redeem code.';
+        }
+    } catch (e) {
+        msgEl.style.display = 'block';
+        msgEl.style.color = '#ef4444';
+        msgEl.textContent = 'Network error.';
+    }
+};
+
+window.toggleContactForm = function() {
+    const container = document.getElementById('contact-form-container');
+    container.style.display = container.style.display === 'none' ? 'block' : 'none';
+};
+
+window.submitContactForm = async function() {
+    const name = document.getElementById('contact-name').value;
+    const email = document.getElementById('contact-email').value;
+    const institution = document.getElementById('contact-institution').value;
+    const message = document.getElementById('contact-message').value;
+    
+    if (!name || !email || !institution || !message) {
+        alert("Please fill all fields");
+        return;
+    }
+    
+    try {
+        const res = await fetch('/api/payments/contact/', {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken() 
+            },
+            body: JSON.stringify({ name, email, institution, message })
+        });
+        if (res.ok) {
+            alert("Request sent successfully! Our team will contact you soon.");
+            toggleContactForm();
+            document.getElementById('contact-message').value = '';
+        } else {
+            alert("Failed to send request.");
+        }
+    } catch (e) {
+        alert("Network error.");
+    }
+};
+
+// Check for payment status in URL on load
+document.addEventListener('DOMContentLoaded', () => {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.has('payment')) {
+        const status = urlParams.get('payment');
+        if (status === 'success') {
+            // Optional: call showToast if you have it
+            openPricingModal();
+        } else if (status === 'failed') {
+            alert('Payment failed or cancelled.');
+        }
+        
+        // Clean URL
+        const newUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
+        window.history.replaceState({path:newUrl}, '', newUrl);
+    }
+});;

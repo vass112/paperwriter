@@ -228,3 +228,10 @@ LOGGING = {
         },
     },
 }
+
+# Payment & Contact Config
+RAZORPAY_KEY_ID = os.getenv('RAZORPAY_KEY_ID', '')
+RAZORPAY_KEY_SECRET = os.getenv('RAZORPAY_KEY_SECRET', '')
+RAZORPAY_PAGE_ID = os.getenv('RAZORPAY_PAGE_ID', '')
+RAZORPAY_PAGE_REDIRECT_URL = os.getenv('RAZORPAY_PAGE_REDIRECT_URL', '')
+CONTACT_EMAIL = os.getenv('CONTACT_EMAIL', '')
