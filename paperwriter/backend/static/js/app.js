@@ -3646,7 +3646,7 @@ window.switchRefMenuTab = switchRefMenuTab;
 window.insertFloatingFootnote = insertFloatingFootnote;
 window.insertFloatingComment = insertFloatingComment;
 
-window.handleCredentialResponse = async function(response) {
+window._realHandleCredentialResponse = async function(response) {
     try {
         const res = await fetch('/api/auth/google/', {
             method: 'POST',
@@ -3666,6 +3666,10 @@ window.handleCredentialResponse = async function(response) {
         console.error("Auth error:", e);
     }
 };
+
+if (window._pendingGoogleResponse) {
+    window._realHandleCredentialResponse(window._pendingGoogleResponse);
+}
 // ============================================================
 // DASHBOARD & PROFILE LOGIC
 // ============================================================
