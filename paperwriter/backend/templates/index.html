@@ -274,6 +274,84 @@
                 <div id="dashboard-grid" class="dashboard-grid">
                     <!-- Cards injected here -->
                 </div>
+
+                <!-- Bottom Info Section -->
+                <div class="dashboard-info-section" style="margin-top: 48px; border-top: 1px solid var(--brand-200); padding-top: 40px; display: grid; grid-template-columns: 2fr 1fr; gap: 40px;">
+                    
+                    <!-- Left: Docs/FAQ & Features -->
+                    <div>
+                        <!-- Features & How-To -->
+                        <div class="info-card" style="background: white; border: 1px solid var(--border-light); border-radius: var(--radius-lg); padding: 24px; margin-bottom: 24px; box-shadow: var(--shadow-card);">
+                            <h3 style="font-family: 'Lora', serif; font-size: 20px; color: var(--brand-900); margin-bottom: 16px;">Platform Features &amp; Guide</h3>
+                            <div class="guide-steps" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                                <div>
+                                    <h4 style="font-weight: 600; font-size: 13px; text-transform: uppercase; color: var(--brand-500); margin-bottom: 8px; letter-spacing: 0.05em;">1. Document Creation &amp; Sections</h4>
+                                    <p style="font-size: 13px; color: var(--brand-600); line-height: 1.6;">Create an IEEE document and draft your paper using the rich-text editor. Organize content dynamically with recursive subsections up to three levels deep.</p>
+                                </div>
+                                <div>
+                                    <h4 style="font-weight: 600; font-size: 13px; text-transform: uppercase; color: var(--brand-500); margin-bottom: 8px; letter-spacing: 0.05em;">2. Authors &amp; Citations</h4>
+                                    <p style="font-size: 13px; color: var(--brand-600); line-height: 1.6;">Manage co-authors in IEEE ordinal order. Fetch reference citations automatically using DOIs or paste raw BibTeX strings in the Library sidebar.</p>
+                                </div>
+                                <div>
+                                    <h4 style="font-weight: 600; font-size: 13px; text-transform: uppercase; color: var(--brand-500); margin-bottom: 8px; letter-spacing: 0.05em;">3. Images &amp; Tables</h4>
+                                    <p style="font-size: 13px; color: var(--brand-600); line-height: 1.6;">Upload figures with captions, LaTeX labels, and column widths. Design clean tables with styles like booktabs (Three-line) and minimal grid styles.</p>
+                                </div>
+                                <div>
+                                    <h4 style="font-weight: 600; font-size: 13px; text-transform: uppercase; color: var(--brand-500); margin-bottom: 8px; letter-spacing: 0.05em;">4. AI Assistance &amp; PDF Export</h4>
+                                    <p style="font-size: 13px; color: var(--brand-600); line-height: 1.6;">Draft mathematical equations using Gemini prompt descriptions or images, rewrite text drafts, and compile to a final IEEE PDF download.</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- FAQ Section -->
+                        <div class="info-card" style="background: white; border: 1px solid var(--border-light); border-radius: var(--radius-lg); padding: 24px; box-shadow: var(--shadow-card);">
+                            <h3 style="font-family: 'Lora', serif; font-size: 20px; color: var(--brand-900); margin-bottom: 16px;">Frequently Asked Questions</h3>
+                            <div class="faq-list" style="display: flex; flex-direction: column; gap: 16px;">
+                                <div>
+                                    <h4 style="font-weight: 600; font-size: 14px; color: var(--brand-800); margin-bottom: 4px;">Is my research data secure and private under DPDP?</h4>
+                                    <p style="font-size: 13px; color: var(--brand-600); line-height: 1.6;">Absolutely. Under the Digital Personal Data Protection (DPDP) Act, we only process data with your explicit consent. Your research papers are strictly private, encrypted, and are never used to train machine learning models.</p>
+                                </div>
+                                <div>
+                                    <h4 style="font-weight: 600; font-size: 14px; color: var(--brand-800); margin-bottom: 4px;">How do I export to a LaTeX ZIP project?</h4>
+                                    <p style="font-size: 13px; color: var(--brand-600); line-height: 1.6;">Open a paper, click the "Export Document" button at the bottom-left sidebar, and select "Export LaTeX Project (ZIP)". This packages your `.tex` source, bibtex `.bib` library, images, and the class file into one archive.</p>
+                                </div>
+                                <div>
+                                    <h4 style="font-weight: 600; font-size: 14px; color: var(--brand-800); margin-bottom: 4px;">Why does local PDF compilation fail?</h4>
+                                    <p style="font-size: 13px; color: var(--brand-600); line-height: 1.6;">Local PDF compilation requires a LaTeX engine (like TeX Live or MiKTeX) installed on your system. If not found, PaperWriter automatically falls back to an online compiler so your exports never fail.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right: Feedback Form -->
+                    <div style="background: white; border: 1px solid var(--border-light); border-radius: var(--radius-lg); padding: 24px; box-shadow: var(--shadow-card); height: fit-content;">
+                        <h3 style="font-family: 'Lora', serif; font-size: 20px; color: var(--brand-900); margin-bottom: 8px;">Share Feedback</h3>
+                        <p style="font-size: 13px; color: var(--brand-500); margin-bottom: 20px;">Help us improve PaperWriter by submitting features requests or issues.</p>
+                        
+                        <form id="dashboard-feedback-form" onsubmit="window.submitDashboardFeedback(event)">
+                            <div class="modal-input-group" style="margin-bottom: 12px;">
+                                <label style="font-size: 11px; font-weight: 600; color: var(--brand-500); display: block; margin-bottom: 4px;">Your Name *</label>
+                                <input type="text" id="feedback-name" class="modal-input" required placeholder="e.g. Dr. Jane Smith" style="width: 100%; border: 1px solid var(--brand-200); border-radius: var(--radius-sm); padding: 8px; font-size: 13px;">
+                            </div>
+                            <div class="modal-input-group" style="margin-bottom: 12px;">
+                                <label style="font-size: 11px; font-weight: 600; color: var(--brand-500); display: block; margin-bottom: 4px;">Email Address *</label>
+                                <input type="email" id="feedback-email" class="modal-input" required placeholder="e.g. jsmith@academy.edu" style="width: 100%; border: 1px solid var(--brand-200); border-radius: var(--radius-sm); padding: 8px; font-size: 13px;">
+                            </div>
+                            <div class="modal-input-group" style="margin-bottom: 12px;">
+                                <label style="font-size: 11px; font-weight: 600; color: var(--brand-500); display: block; margin-bottom: 4px;">Institution / Affiliation *</label>
+                                <input type="text" id="feedback-institution" class="modal-input" required placeholder="e.g. MIT, Department of CS" style="width: 100%; border: 1px solid var(--brand-200); border-radius: var(--radius-sm); padding: 8px; font-size: 13px;">
+                            </div>
+                            <div class="modal-input-group" style="margin-bottom: 16px;">
+                                <label style="font-size: 11px; font-weight: 600; color: var(--brand-500); display: block; margin-bottom: 4px;">Message *</label>
+                                <textarea id="feedback-message" class="modal-textarea" required placeholder="Describe your experience or feature request..." style="width: 100%; height: 100px; min-height: 100px; border: 1px solid var(--brand-200); border-radius: var(--radius-sm); padding: 8px; font-family: inherit; font-size: 13px; outline: none; resize: none;"></textarea>
+                            </div>
+                            
+                            <div id="feedback-status-msg" style="margin-top: 10px; font-size: 13px; display: none; padding: 8px; border-radius: var(--radius-sm); margin-bottom: 12px;"></div>
+                            
+                            <button type="submit" class="btn-primary" style="width: 100%; padding: 10px 16px;">Submit Feedback</button>
+                        </form>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -288,19 +366,54 @@
             </div>
             <div class="modal-body" style="padding: 24px; line-height: 1.6; color: var(--brand-700); font-size: 14px;">
                 <h4 style="margin-bottom: 12px; color: var(--brand-900); font-size: 16px;">1. Introduction</h4>
-                <p style="margin-bottom: 16px;">Welcome to PaperWriter. We respect your privacy and are committed to protecting your personal data in strict accordance with the Digital Personal Data Protection (DPDP) Act of India.</p>
+                <p style="margin-bottom: 16px;">Welcome to PaperWriter. We are deeply committed to protecting your personal data and ensuring compliance with the Digital Personal Data Protection (DPDP) Act, 2023 of India, along with standard global data privacy regulations (such as GDPR). This policy describes what data we collect, how it is processed, and your rights as a Data Principal.</p>
 
-                <h4 style="margin-bottom: 12px; color: var(--brand-900); font-size: 16px;">2. Data Collection and Purpose</h4>
-                <p style="margin-bottom: 16px;">We collect only the minimum necessary data required to provide our scholarly formatting services. This includes basic account information (email address) and the documents you explicitly save to our cloud servers. We do not use your documents to train artificial intelligence models without your explicit consent.</p>
+                <h4 style="margin-bottom: 12px; color: var(--brand-900); font-size: 16px;">2. Terminology under DPDP Act</h4>
+                <p style="margin-bottom: 16px;">
+                    • <strong>Data Principal (You):</strong> The individual who owns and creates the personal data.<br>
+                    • <strong>Data Fiduciary (PaperWriter):</strong> The entity that determines the purpose and means of processing personal data.
+                </p>
 
-                <h4 style="margin-bottom: 12px; color: var(--brand-900); font-size: 16px;">3. User Consent</h4>
-                <p style="margin-bottom: 16px;">By using our services, you provide explicit consent for the processing of your personal data solely for the purpose of document syncing, rendering, and management. You may withdraw this consent at any time through your Profile Settings.</p>
+                <h4 style="margin-bottom: 12px; color: var(--brand-900); font-size: 16px;">3. Data Collection and Sources</h4>
+                <p style="margin-bottom: 8px;">We only collect data that is strictly necessary for providing the services of the Scholarly Workspace. This includes:</p>
+                <p style="margin-bottom: 16px; padding-left: 12px;">
+                    • <strong>Account Credentials:</strong> Email address and name retrieved via secure Google Sign-In.<br>
+                    • <strong>User-Generated Content:</strong> Your paper drafts, sections, author names, references, uploaded figures, and mathematical tables.<br>
+                    • <strong>Technical Data:</strong> Anonymized usage logs, IP addresses, session cookies required to persist login states, and error reports.
+                </p>
 
-                <h4 style="margin-bottom: 12px; color: var(--brand-900); font-size: 16px;">4. Right to be Forgotten</h4>
-                <p style="margin-bottom: 16px;">Under the DPDP Act, you have the absolute right to erasure. You can permanently delete your account and all associated documents instantaneously using the "Delete Account" feature in your Profile Settings.</p>
-                
-                <h4 style="margin-bottom: 12px; color: var(--brand-900); font-size: 16px;">5. Security Measures</h4>
-                <p style="margin-bottom: 16px;">We implement robust security measures to prevent unauthorized access, alteration, disclosure, or destruction of your personal information. However, no internet-based service can guarantee absolute security.</p>
+                <h4 style="margin-bottom: 12px; color: var(--brand-900); font-size: 16px;">4. Purpose and Legal Basis of Processing</h4>
+                <p style="margin-bottom: 8px;">We process your data strictly based on your explicit consent, which is recorded upon your initial registration. The processing is carried out for the following purposes:</p>
+                <p style="margin-bottom: 16px; padding-left: 12px;">
+                    • Rendering and compiling LaTeX drafts to IEEE-formatted PDFs or ZIP archives.<br>
+                    • Auto-saving drafts to our servers so you can sync and access your papers across devices.<br>
+                    • Translating descriptions and scans into mathematical code using the Google Gemini API (done securely, without storing drafts for model training).<br>
+                    • Processing optional transaction callbacks through Razorpay to unlock extra download credits.
+                </p>
+                <p style="margin-bottom: 16px;"><strong>Note:</strong> We do NOT sell, lease, or use your manuscripts to train artificial intelligence models without your explicit, separate consent.</p>
+
+                <h4 style="margin-bottom: 12px; color: var(--brand-900); font-size: 16px;">5. Rights of the Data Principal</h4>
+                <p style="margin-bottom: 8px;">In accordance with the DPDP Act, 2023, you hold the following rights:</p>
+                <p style="margin-bottom: 16px; padding-left: 12px;">
+                    • <strong>Right to Access:</strong> You can view all documents, authors, and metadata stored on your profile at any time in your dashboard.<br>
+                    • <strong>Right to Correction & Completion:</strong> You can edit any document titles, co-authors, bibliography references, or metadata fields instantly.<br>
+                    • <strong>Right to Withdraw Consent:</strong> You can toggle or withdraw consent settings within your Profile panel.<br>
+                    • <strong>Right to Erasure (Right to be Forgotten):</strong> You have the absolute right to erase all data. Clicking "Erase My Data" in your Profile instantly and permanently deletes your account, user profile, and all associated manuscripts from our database and disk.
+                </p>
+
+                <h4 style="margin-bottom: 12px; color: var(--brand-900); font-size: 16px;">6. Security and Data Retention</h4>
+                <p style="margin-bottom: 16px;">Your data is stored in secure database clusters and is encrypted in transit using SSL/TLS. We retain your personal data only as long as your account is active. If you delete your account, all personal details and document content are deleted immediately without recovery options.</p>
+
+                <h4 style="margin-bottom: 12px; color: var(--brand-900); font-size: 16px;">7. Third-Party Integrations</h4>
+                <p style="margin-bottom: 8px;">To offer advanced workspace features, we interact with the following trusted third parties:</p>
+                <p style="margin-bottom: 16px; padding-left: 12px;">
+                    • <strong>Google LLC:</strong> Used for secure single-sign-on (SSO) authentication.<br>
+                    • <strong>Razorpay Software Pvt. Ltd.:</strong> Secure processing of payments for credit top-ups.<br>
+                    • <strong>Google Gemini API:</strong> Used exclusively to perform mathematical translations and formatting adjustments when you invoke AI commands.
+                </p>
+
+                <h4 style="margin-bottom: 12px; color: var(--brand-900); font-size: 16px;">8. Grievance Redressal and Contact</h4>
+                <p style="margin-bottom: 16px;">If you have any questions, concerns, or grievances regarding our data processing practices, or wish to report an issue to our Data Protection Officer, you can submit an inquiry via the Feedback Form on the dashboard or email us directly at <strong>dpo@paperwriter.app</strong>.</p>
             </div>
         </div>
     </div>

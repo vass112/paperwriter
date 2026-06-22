@@ -3684,6 +3684,18 @@ window.loadDashboard = async function() {
     document.getElementById('dashboard-view').style.display = 'flex';
     if(typeof toggleHeaderVisibility === 'function') toggleHeaderVisibility(true);
     
+    // Autofill feedback form if user profile is available
+    if (window.userProfile) {
+        const feedbackName = document.getElementById('feedback-name');
+        const feedbackEmail = document.getElementById('feedback-email');
+        if (feedbackName && !feedbackName.value) {
+            feedbackName.value = `${userProfile.first_name} ${userProfile.last_name}`.trim() || userProfile.username || '';
+        }
+        if (feedbackEmail && !feedbackEmail.value) {
+            feedbackEmail.value = userProfile.email || '';
+        }
+    }
+    
     try {
         const response = await fetch('/api/documents/');
         const docs = await response.json();
@@ -3984,4 +3996,51 @@ document.addEventListener('DOMContentLoaded', () => {
         const newUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
         window.history.replaceState({path:newUrl}, '', newUrl);
     }
-});;
+});
+
+window.submitDashboardFeedback = async function(event) {
+    event.preventDefault();
+    
+    const name = document.getElementById('feedback-name').value;
+    const email = document.getElementById('feedback-email').value;
+    const institution = document.getElementById('feedback-institution').value;
+    const message = document.getElementById('feedback-message').value;
+    const statusMsg = document.getElementById('feedback-status-msg');
+    
+    if (!name || !email || !institution || !message) {
+        statusMsg.style.display = 'block';
+        statusMsg.style.color = '#ef4444';
+        statusMsg.style.background = '#fef2f2';
+        statusMsg.textContent = 'Please fill out all fields.';
+        return;
+    }
+    
+    try {
+        const res = await fetch('/api/payments/contact/', {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken() 
+            },
+            body: JSON.stringify({ name, email, institution, message })
+        });
+        
+        statusMsg.style.display = 'block';
+        if (res.ok) {
+            statusMsg.style.color = '#10b981';
+            statusMsg.style.background = '#ecfdf5';
+            statusMsg.textContent = 'Thank you for your feedback!';
+            document.getElementById('feedback-message').value = '';
+            document.getElementById('feedback-institution').value = '';
+        } else {
+            statusMsg.style.color = '#ef4444';
+            statusMsg.style.background = '#fef2f2';
+            statusMsg.textContent = 'Failed to submit feedback. Please try again.';
+        }
+    } catch (e) {
+        statusMsg.style.display = 'block';
+        statusMsg.style.color = '#ef4444';
+        statusMsg.style.background = '#fef2f2';
+        statusMsg.textContent = 'Network error. Please check your connection.';
+    }
+};

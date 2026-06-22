@@ -3183,3 +3183,10 @@ body.is-resizing iframe {
     transform: translateY(-0.5px);
     box-shadow: 0 4px 6px -1px rgba(15, 23, 42, 0.15);
 }
+
+@media (max-width: 900px) {
+    .dashboard-info-section {
+        grid-template-columns: 1fr !important;
+        gap: 32px !important;
+    }
+}
