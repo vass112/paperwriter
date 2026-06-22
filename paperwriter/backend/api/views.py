@@ -775,11 +775,11 @@ def generate_latex_source(document):
 
         text = re.sub(r'\\ref{([^}]+)}', process_raw_ref, text)
 
-        text = re.sub(r'<p>(.*?)</p>', r'\1\n\n', text)
-        text = re.sub(r'<h3>(.*?)</h3>', r'\1\n\n', text)
-        text = re.sub(r'<h4>(.*?)</h4>', r'\1\n\n', text)
-        text = re.sub(r'<strong>(.*?)</strong>', r'\\textbf{\1}', text)
-        text = re.sub(r'<em>(.*?)</em>', r'\\textit{\1}', text)
+        text = re.sub(r'<p>(.*?)</p>', r'\1\n\n', text, flags=re.DOTALL)
+        text = re.sub(r'<h3>(.*?)</h3>', r'\1\n\n', text, flags=re.DOTALL)
+        text = re.sub(r'<h4>(.*?)</h4>', r'\1\n\n', text, flags=re.DOTALL)
+        text = re.sub(r'<strong>(.*?)</strong>', r'\\textbf{\1}', text, flags=re.DOTALL)
+        text = re.sub(r'<em>(.*?)</em>', r'\\textit{\1}', text, flags=re.DOTALL)
         text = text.replace('&nbsp;', ' ').replace('&lt;', '<').replace('&gt;', '>')
         return text.strip()
 
