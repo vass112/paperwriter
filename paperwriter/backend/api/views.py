@@ -1162,7 +1162,12 @@ def buy_credits(request):
     
     callback_url = request.build_absolute_uri('/api/payments/callback/')
     user_email = request.user.email
-    redirect_url = f"https://rzp.io/pl/{settings.RAZORPAY_PAGE_ID}?callback_url={callback_url}&user_email={user_email}"
+    
+    page_id = settings.RAZORPAY_PAGE_ID
+    if not (page_id.startswith('pl/') or page_id.startswith('rzp/')):
+        page_id = f"pl/{page_id}"
+        
+    redirect_url = f"https://rzp.io/{page_id}?callback_url={callback_url}&user_email={user_email}"
     return redirect(redirect_url)
 
 @api_view(['GET'])

@@ -3155,3 +3155,31 @@ body.is-resizing iframe {
         padding: 24px;
     }
 }
+
+/* Upgrade Button in Header */
+#upgrade-btn {
+    background: var(--brand-900);
+    color: #ffffff;
+    border: 1px solid var(--brand-950);
+    padding: 6px 12px;
+    border-radius: var(--radius-sm);
+    font-weight: 600;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-right: 12px;
+    cursor: pointer;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+    transition: all 0.2s var(--ease-smooth);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-family: inherit;
+}
+
+#upgrade-btn:hover {
+    background: var(--brand-800);
+    border-color: var(--brand-900);
+    transform: translateY(-0.5px);
+    box-shadow: 0 4px 6px -1px rgba(15, 23, 42, 0.15);
+}
