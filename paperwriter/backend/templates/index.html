@@ -7,8 +7,7 @@
     <title>PaperWriter — Scholarly Workspace</title>
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <script>
-        window.csrfToken = "{{ csrf_token }}";
-        window.GOOGLE_CLIENT_ID = "{{ google_client_id }}";
+        window.GOOGLE_CLIENT_ID = "{{ google_client_id|escapejs }}";
         window.addEventListener('error', function(e) {
             console.error("GLOBAL ERROR DETECTED:", e.message, "at", e.filename, ":", e.lineno, e.error);
             var errDiv = document.createElement('div');
