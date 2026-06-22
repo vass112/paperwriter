@@ -3190,3 +3190,54 @@ body.is-resizing iframe {
         gap: 32px !important;
     }
 }
+
+/* --- Collapsible FAQ Accordion --- */
+.faq-details {
+    border: 1px solid var(--brand-200);
+    border-radius: var(--radius-md);
+    margin-bottom: 12px;
+    background: var(--bg-surface);
+    transition: all 0.2s ease;
+    overflow: hidden;
+}
+.faq-details:hover {
+    border-color: var(--brand-300);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+}
+.faq-details[open] {
+    border-color: var(--brand-400);
+    box-shadow: 0 4px 6px rgba(15, 23, 42, 0.05);
+}
+.faq-summary {
+    padding: 14px 18px;
+    font-weight: 600;
+    font-size: 13.5px;
+    color: var(--brand-800);
+    cursor: pointer;
+    background: var(--brand-50);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    list-style: none;
+    outline: none;
+    user-select: none;
+}
+.faq-summary::-webkit-details-marker {
+    display: none;
+}
+.faq-summary svg.chevron {
+    transition: transform 0.2s ease;
+    color: var(--brand-500);
+}
+.faq-details[open] .faq-summary svg.chevron {
+    transform: rotate(180deg);
+    color: var(--brand-900);
+}
+.faq-content {
+    padding: 16px 18px;
+    font-size: 13px;
+    color: var(--brand-600);
+    line-height: 1.6;
+    background: #ffffff;
+    border-top: 1px solid var(--brand-100);
+}

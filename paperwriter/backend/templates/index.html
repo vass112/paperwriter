@@ -288,44 +288,103 @@
                     <!-- Left: Docs/FAQ & Features -->
                     <div>
                         <!-- Features & How-To -->
-                        <div class="info-card" style="background: white; border: 1px solid var(--border-light); border-radius: var(--radius-lg); padding: 24px; margin-bottom: 24px; box-shadow: var(--shadow-card);">
-                            <h3 style="font-family: 'Lora', serif; font-size: 20px; color: var(--brand-900); margin-bottom: 16px;">Platform Features &amp; Guide</h3>
-                            <div class="guide-steps" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
-                                <div>
-                                    <h4 style="font-weight: 600; font-size: 13px; text-transform: uppercase; color: var(--brand-500); margin-bottom: 8px; letter-spacing: 0.05em;">1. Document Creation &amp; Sections</h4>
-                                    <p style="font-size: 13px; color: var(--brand-600); line-height: 1.6;">Create an IEEE document and draft your paper using the rich-text editor. Organize content dynamically with recursive subsections up to three levels deep.</p>
+                        <div class="info-card" style="background: white; border: 1px solid var(--border-light); border-radius: var(--radius-lg); padding: 28px; margin-bottom: 28px; box-shadow: var(--shadow-card);">
+                            <h3 style="font-family: 'Lora', serif; font-size: 21px; color: var(--brand-900); margin-bottom: 20px;">Platform Features &amp; Guide</h3>
+                            <div class="guide-steps" style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+                                <div style="display: flex; gap: 16px;">
+                                    <div style="background: var(--brand-100); color: var(--brand-900); width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 15px; flex-shrink: 0; box-shadow: 0 2px 4px rgba(15,23,42,0.04);">1</div>
+                                    <div>
+                                        <h4 style="font-weight: 600; font-size: 14px; color: var(--brand-900); margin: 0 0 6px 0;">Document &amp; Outline Creation</h4>
+                                        <p style="font-size: 13px; color: var(--brand-600); line-height: 1.6; margin: 0;">Create an IEEE document and draft using our rich-text editor. Organize content dynamically with recursive subsections up to three levels deep.</p>
+                                    </div>
                                 </div>
-                                <div>
-                                    <h4 style="font-weight: 600; font-size: 13px; text-transform: uppercase; color: var(--brand-500); margin-bottom: 8px; letter-spacing: 0.05em;">2. Authors &amp; Citations</h4>
-                                    <p style="font-size: 13px; color: var(--brand-600); line-height: 1.6;">Manage co-authors in IEEE ordinal order. Fetch reference citations automatically using DOIs or paste raw BibTeX strings in the Library sidebar.</p>
+                                <div style="display: flex; gap: 16px;">
+                                    <div style="background: var(--brand-100); color: var(--brand-900); width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 15px; flex-shrink: 0; box-shadow: 0 2px 4px rgba(15,23,42,0.04);">2</div>
+                                    <div>
+                                        <h4 style="font-weight: 600; font-size: 14px; color: var(--brand-900); margin: 0 0 6px 0;">Authors &amp; Citations</h4>
+                                        <p style="font-size: 13px; color: var(--brand-600); line-height: 1.6; margin: 0;">Manage co-authors in IEEE ordinal order. Fetch references automatically by pasting a DOI or entering raw BibTeX databases.</p>
+                                    </div>
                                 </div>
-                                <div>
-                                    <h4 style="font-weight: 600; font-size: 13px; text-transform: uppercase; color: var(--brand-500); margin-bottom: 8px; letter-spacing: 0.05em;">3. Images &amp; Tables</h4>
-                                    <p style="font-size: 13px; color: var(--brand-600); line-height: 1.6;">Upload figures with captions, LaTeX labels, and column widths. Design clean tables with styles like booktabs (Three-line) and minimal grid styles.</p>
+                                <div style="display: flex; gap: 16px;">
+                                    <div style="background: var(--brand-100); color: var(--brand-900); width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 15px; flex-shrink: 0; box-shadow: 0 2px 4px rgba(15,23,42,0.04);">3</div>
+                                    <div>
+                                        <h4 style="font-weight: 600; font-size: 14px; color: var(--brand-900); margin: 0 0 6px 0;">Images &amp; Tables Builder</h4>
+                                        <p style="font-size: 13px; color: var(--brand-600); line-height: 1.6; margin: 0;">Upload figures with custom column layout, caption, and LaTeX labels. Design clean tables with Three-line booktabs styling.</p>
+                                    </div>
                                 </div>
-                                <div>
-                                    <h4 style="font-weight: 600; font-size: 13px; text-transform: uppercase; color: var(--brand-500); margin-bottom: 8px; letter-spacing: 0.05em;">4. AI Assistance &amp; PDF Export</h4>
-                                    <p style="font-size: 13px; color: var(--brand-600); line-height: 1.6;">Draft mathematical equations using Gemini prompt descriptions or images, rewrite text drafts, and compile to a final IEEE PDF download.</p>
+                                <div style="display: flex; gap: 16px;">
+                                    <div style="background: var(--brand-100); color: var(--brand-900); width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 15px; flex-shrink: 0; box-shadow: 0 2px 4px rgba(15,23,42,0.04);">4</div>
+                                    <div>
+                                        <h4 style="font-weight: 600; font-size: 14px; color: var(--brand-900); margin: 0 0 6px 0;">AI Assistant &amp; PDF Exports</h4>
+                                        <p style="font-size: 13px; color: var(--brand-600); line-height: 1.6; margin: 0;">Convert math prompts to LaTeX, polish drafts using Gemini, and compile directly to clean, double-column IEEE PDFs.</p>
+                                    </div>
                                 </div>
                             </div>
                         </div>
 
                         <!-- FAQ Section -->
-                        <div class="info-card" style="background: white; border: 1px solid var(--border-light); border-radius: var(--radius-lg); padding: 24px; box-shadow: var(--shadow-card);">
-                            <h3 style="font-family: 'Lora', serif; font-size: 20px; color: var(--brand-900); margin-bottom: 16px;">Frequently Asked Questions</h3>
-                            <div class="faq-list" style="display: flex; flex-direction: column; gap: 16px;">
-                                <div>
-                                    <h4 style="font-weight: 600; font-size: 14px; color: var(--brand-800); margin-bottom: 4px;">Is my research data secure and private under DPDP?</h4>
-                                    <p style="font-size: 13px; color: var(--brand-600); line-height: 1.6;">Absolutely. Under the Digital Personal Data Protection (DPDP) Act, we only process data with your explicit consent. Your research papers are strictly private, encrypted, and are never used to train machine learning models.</p>
-                                </div>
-                                <div>
-                                    <h4 style="font-weight: 600; font-size: 14px; color: var(--brand-800); margin-bottom: 4px;">How do I export to a LaTeX ZIP project?</h4>
-                                    <p style="font-size: 13px; color: var(--brand-600); line-height: 1.6;">Open a paper, click the "Export Document" button at the bottom-left sidebar, and select "Export LaTeX Project (ZIP)". This packages your `.tex` source, bibtex `.bib` library, images, and the class file into one archive.</p>
-                                </div>
-                                <div>
-                                    <h4 style="font-weight: 600; font-size: 14px; color: var(--brand-800); margin-bottom: 4px;">Why does local PDF compilation fail?</h4>
-                                    <p style="font-size: 13px; color: var(--brand-600); line-height: 1.6;">Local PDF compilation requires a LaTeX engine (like TeX Live or MiKTeX) installed on your system. If not found, PaperWriter automatically falls back to an online compiler so your exports never fail.</p>
-                                </div>
+                        <div class="info-card" style="background: white; border: 1px solid var(--border-light); border-radius: var(--radius-lg); padding: 28px; box-shadow: var(--shadow-card);">
+                            <h3 style="font-family: 'Lora', serif; font-size: 21px; color: var(--brand-900); margin-bottom: 20px;">Frequently Asked Questions</h3>
+                            <div class="faq-list">
+                                <details class="faq-details">
+                                    <summary class="faq-summary">
+                                        <span>Is my research data secure and private under DPDP?</span>
+                                        <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                                    </summary>
+                                    <div class="faq-content">
+                                        Absolutely. Under the Digital Personal Data Protection (DPDP) Act, 2023 of India, we process your personal data and documents strictly based on your explicit consent. Your research drafts are private, encrypted in transit, and are never used to train machine learning models.
+                                    </div>
+                                </details>
+
+                                <details class="faq-details">
+                                    <summary class="faq-summary">
+                                        <span>How do I export to a LaTeX ZIP project?</span>
+                                        <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                                    </summary>
+                                    <div class="faq-content">
+                                        Open any paper, click the "Export" button on the bottom sidebar, and select "Export LaTeX Project (ZIP)". This packages your `.tex` source file, BibTeX `.bib` bibliography database, all uploaded figures, and the IEEE class style file into a single structured archive.
+                                    </div>
+                                </details>
+
+                                <details class="faq-details">
+                                    <summary class="faq-summary">
+                                        <span>Why does local PDF compilation fail?</span>
+                                        <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                                    </summary>
+                                    <div class="faq-content">
+                                        Local PDF compilation requires a LaTeX distribution (like TeX Live or MiKTeX) installed on your operating system. If PaperWriter cannot locate a local LaTeX engine, it automatically routes the compilation request to our secure cloud compiler so your exports never fail.
+                                    </div>
+                                </details>
+
+                                <details class="faq-details">
+                                    <summary class="faq-summary">
+                                        <span>How do I manage bibliography citations (BibTeX)?</span>
+                                        <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                                    </summary>
+                                    <div class="faq-content">
+                                        Open the Citations sidebar from the left panel. You can fetch citation entries automatically by typing a DOI or paste your raw BibTeX entries directly. To cite a reference in your text, insert the citation label (e.g. `\cite{key}`).
+                                    </div>
+                                </details>
+
+                                <details class="faq-details">
+                                    <summary class="faq-summary">
+                                        <span>Can I collaborate with co-authors?</span>
+                                        <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                                    </summary>
+                                    <div class="faq-content">
+                                        Yes. Open the "Authors" dialog from the sidebar to manage your co-authors in IEEE ordinal order. All author metadata (names, departments, email, and affiliations) will be dynamically formatted on the compiled title block.
+                                    </div>
+                                </details>
+
+                                <details class="faq-details">
+                                    <summary class="faq-summary">
+                                        <span>How do I get more export credits?</span>
+                                        <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                                    </summary>
+                                    <div class="faq-content">
+                                        Click the "Upgrade" button in the navigation header. You can purchase additional credits securely via Razorpay or redeem a promotional code provided by your institution or conference.
+                                    </div>
+                                </details>
                             </div>
                         </div>
                     </div>
@@ -359,8 +418,8 @@
                         </form>
                     </div>
                 </div>
-                                <!-- Dashboard Footer / Credits -->
-                <div style="margin-top: 48px; border-top: 1px solid var(--brand-200); padding-top: 24px; text-align: center; font-size: 13px; color: var(--brand-500);">
+                <!-- Dashboard Footer / Credits -->
+                <div style="margin-top: 64px; border-top: 1px solid var(--brand-200); padding-top: 32px; padding-bottom: 32px; text-align: center; font-size: 13px; color: var(--brand-500);">
                     <div style="margin-bottom: 8px; display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 16px; line-height: 1.6;">
                         <span style="font-weight: 600; color: var(--brand-600);">Development Team:</span>
                         <div style="display: flex; align-items: center; gap: 6px; color: var(--brand-700);">
@@ -1049,7 +1108,7 @@
         </section>
         
         <!-- Footer -->
-        <footer class="landing-footer" style="display: flex; flex-direction: column; gap: 20px; align-items: center; padding: 40px 20px; border-top: 1px solid var(--border-light); background: var(--bg-surface);">
+        <footer class="landing-footer" style="display: flex; flex-direction: column; gap: 24px; align-items: center; padding: 60px 20px 48px 20px; border-top: 1px solid var(--border-light); background: var(--bg-surface);">
             <div class="developer-credits" style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
                 <h4 style="font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--brand-500); margin: 0;">Development Team</h4>
                 <div class="dev-links" style="display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 24px; font-size: 13px; line-height: 1.6;">
