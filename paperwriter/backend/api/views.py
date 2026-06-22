@@ -743,13 +743,22 @@ def generate_latex_source(document):
         if not content:
             return ""
 
+        import html as html_module
+
+        equations = []
         def unescape_latex(match):
             eq_type = match.group(1)
             latex = html_module.unescape(match.group(2))
             if eq_type == 'block':
-                return f'$${latex}$$'
-            return f'${latex}$'
+                eq_str = f'$${latex}$$'
+            else:
+                eq_str = f'${latex}$'
+            equations.append(eq_str)
+            return f'__EQ_{len(equations)-1}__'
 
+        text = re.sub(r'<span[^>]*class="eq-chip"[^>]*data-type="(inline|block)"[^>]*data-latex="([^"]+)"[^>]*>.*?</span>', unescape_latex, content)
+
+        refs = []
         def process_ref_cite(match):
             ref_type = match.group(1)
             label = match.group(2)
@@ -758,10 +767,10 @@ def generate_latex_source(document):
                 img = next((i for i in all_images if i.label == label), None)
                 if img and img.id not in emitted_image_ids:
                     emitted_image_ids.add(img.id)
-                    out += '\n' + '\n'.join(emit_figure(img)) + '\n'
-            return out
+                    out += '\n\n' + '\n'.join(emit_figure(img)) + '\n\n'
+            refs.append(out)
+            return f'__REF_{len(refs)-1}__'
 
-        text = re.sub(r'<span[^>]*class="eq-chip"[^>]*data-type="(inline|block)"[^>]*data-latex="([^"]+)"[^>]*>.*?</span>', unescape_latex, content)
         text = re.sub(r'<span[^>]*data-type="(ref|cite)"[^>]*data-label="([^"]+)"[^>]*>.*?</span>', process_ref_cite, text)
 
         def process_raw_ref(match):
@@ -770,8 +779,9 @@ def generate_latex_source(document):
             img = next((i for i in all_images if i.label == label), None)
             if img and img.id not in emitted_image_ids:
                 emitted_image_ids.add(img.id)
-                out += '\n' + '\n'.join(emit_figure(img)) + '\n'
-            return out
+                out += '\n\n' + '\n'.join(emit_figure(img)) + '\n\n'
+            refs.append(out)
+            return f'__REF_{len(refs)-1}__'
 
         text = re.sub(r'\\ref{([^}]+)}', process_raw_ref, text)
 
@@ -780,8 +790,19 @@ def generate_latex_source(document):
         text = re.sub(r'<h4>(.*?)</h4>', r'\1\n\n', text, flags=re.DOTALL)
         text = re.sub(r'<strong>(.*?)</strong>', r'\\textbf{\1}', text, flags=re.DOTALL)
         text = re.sub(r'<em>(.*?)</em>', r'\\textit{\1}', text, flags=re.DOTALL)
-        text = text.replace('&nbsp;', ' ').replace('&lt;', '<').replace('&gt;', '>')
-        return text.strip()
+
+        text = re.sub(r'<[^>]+>', '', text)
+        text = html_module.unescape(text)
+
+        text = text.replace('%', '\\%').replace('&', '\\&').replace('#', '\\#')
+
+        for i, ref_str in enumerate(refs):
+            text = text.replace(f'__REF_{i}__', ref_str)
+
+        for i, eq_str in enumerate(equations):
+            text = text.replace(f'__EQ_{i}__', eq_str)
+
+        return text.strip() + '\n\n'
 
     def emit_section(section, depth=1):
         lines = []
