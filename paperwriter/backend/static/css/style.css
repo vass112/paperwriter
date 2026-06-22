@@ -68,8 +68,14 @@ body {
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     overflow: hidden;
+    overflow-x: hidden;
     font-size: 14px;
     line-height: 1.5;
+    width: 100%;
+}
+html {
+    overflow-x: hidden;
+    width: 100%;
 }
 
 body.is-resizing * {
@@ -89,6 +95,7 @@ body.is-resizing iframe {
 }
 ::-webkit-scrollbar-track {
     background: transparent;
+    margin: 12px;
 }
 ::-webkit-scrollbar-thumb {
     background: var(--brand-200);
