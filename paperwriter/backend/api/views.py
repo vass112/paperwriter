@@ -926,9 +926,12 @@ def compile_pdf_online(latex_source, document, cls_source):
 
     for img in document.images.all():
         if img.image_base64:
+            b64_str = img.image_base64
+            if 'base64,' in b64_str:
+                b64_str = b64_str.split('base64,')[1]
             resources.append({
                 "path": img.filename.replace(" ", "_"),
-                "file": img.image_base64
+                "file": b64_str
             })
 
     payload = {
@@ -981,9 +984,12 @@ def _compile_pdf_to_bytes(latex_source, document):
             for img in document.images.all():
                 if img.image_base64:
                     try:
+                        b64_str = img.image_base64
+                        if 'base64,' in b64_str:
+                            b64_str = b64_str.split('base64,')[1]
                         img_disk_path = _os.path.join(tmpdir, img.filename.replace(" ", "_"))
                         with open(img_disk_path, 'wb') as f:
-                            f.write(base64.b64decode(img.image_base64))
+                            f.write(base64.b64decode(b64_str))
                     except Exception:
                         pass
 
