@@ -258,7 +258,10 @@ class DocumentViewSet(viewsets.ModelViewSet):
         try:
             user_to_add = User.objects.get(email=email)
         except User.DoesNotExist:
-            return Response({'error': f'No user found with email {email}. They must register first.'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({
+                'error': f'No user found with email {email}. They must register first.',
+                'unregistered': True
+            }, status=status.HTTP_404_NOT_FOUND)
             
         document.collaborators.add(user_to_add)
         return Response({'success': True, 'message': f'Document shared with {email}.'})

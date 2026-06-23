@@ -12,6 +12,11 @@
       "dest": "paperwriter/wsgi.py"
     }
   ],
+  "functions": {
+    "paperwriter/wsgi.py": {
+      "maxDuration": 60
+    }
+  },
   "env": {
     "DJANGO_SETTINGS_MODULE": "paperwriter.settings"
   }

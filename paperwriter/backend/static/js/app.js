@@ -808,8 +808,12 @@ async function loadDocument(id) {
         addSectionBtn.onclick = () => createSection();
         nav.appendChild(addSectionBtn);
 
+        // Setup Real-time connections
+        setupEditorPresence(id);
+        setupDocumentWebSocket(id);
+
         updateFigRefBars();
-        await updateLatexPreview();
+        await refreshPdfPreview();
 
     } catch (e) {
         console.error("Error loading document details:", e);
@@ -1087,33 +1091,18 @@ async function refreshPdfPreview() {
             }
         } else {
             console.error('Failed to update PDF preview:', pdfResponse.status);
-            await renderFastHtmlPreview();
+            alert("PDF compilation failed. Please check your LaTeX syntax or ensure online compiler is reachable.");
         }
     } catch (e) {
         console.error('Failed to update PDF preview:', e);
-        await renderFastHtmlPreview();
+        alert("PDF compilation network error.");
     } finally {
         if (overlay) overlay.style.display = 'none';
     }
 }
 
-async function renderFastHtmlPreview() {
-    try {
-        const response = await fetch(`/api/document/${currentDocId}/latex`);
-        const data = await response.json();
-        if (data.latex) {
-            renderLatexAsHTML(data.latex);
-        }
-    } catch (e) {
-        console.error('HTML fallback failed:', e);
-    }
-}
-
 async function updateLatexPreview() {
     if (!currentDocId) return;
-
-    // Do instant HTML preview
-    await renderFastHtmlPreview();
 
     // Check Auto-Compile toggle
     const autoCompileToggle = document.getElementById('auto-compile-toggle');
@@ -1904,7 +1893,7 @@ async function deleteImage(imageId) {
         document.getElementById('img-width-val').textContent = '0.90\u00d7 column';
 
         await loadImages();
-        await updateLatexPreview();
+        await refreshPdfPreview();
     } catch (e) {
         alert('Error deleting image: ' + e.message);
     }
@@ -3690,6 +3679,8 @@ window.resolveComment = resolveComment;
 window.switchRefMenuTab = switchRefMenuTab;
 window.insertFloatingFootnote = insertFloatingFootnote;
 window.insertFloatingComment = insertFloatingComment;
+window.refreshPdfPreview = refreshPdfPreview;
+
 
 window._realHandleCredentialResponse = async function(response) {
     try {
@@ -4363,12 +4354,25 @@ window.addCollaborator = async function() {
             emailInput.value = '';
             await loadCollaborators();
         } else {
-            errorEl.style.display = 'block';
-            errorEl.textContent = data.error || 'Failed to add collaborator.';
+            if (res.status === 404 && data.unregistered) {
+                // Draft an email using mailto
+                const subject = encodeURIComponent("Invitation to collaborate on PaperWriter");
+                const body = encodeURIComponent(`Hi,\n\nI would like to invite you to collaborate on a document in PaperWriter.\n\nPlease register at ${window.location.origin} and let me know when you have an account so I can share the document with you!\n\nBest,`);
+                window.location.href = `mailto:${email}?subject=${subject}&body=${body}`;
+                
+                errorEl.style.display = 'block';
+                errorEl.textContent = `User is not registered. An email invite has been drafted.`;
+                errorEl.style.color = 'var(--brand-600)';
+            } else {
+                errorEl.style.display = 'block';
+                errorEl.textContent = data.error || 'Failed to add collaborator.';
+                errorEl.style.color = '';
+            }
         }
     } catch (e) {
         errorEl.style.display = 'block';
-        errorEl.textContent = 'Network error.';
+        errorEl.textContent = 'Network error while adding collaborator.';
+        errorEl.style.color = '';
     }
 };
 
