@@ -4355,13 +4355,8 @@ window.addCollaborator = async function() {
             await loadCollaborators();
         } else {
             if (res.status === 404 && data.unregistered) {
-                // Draft an email using mailto
-                const subject = encodeURIComponent("Invitation to collaborate on PaperWriter");
-                const body = encodeURIComponent(`Hi,\n\nI would like to invite you to collaborate on a document in PaperWriter.\n\nPlease register at ${window.location.origin} and let me know when you have an account so I can share the document with you!\n\nBest,`);
-                window.location.href = `mailto:${email}?subject=${subject}&body=${body}`;
-                
                 errorEl.style.display = 'block';
-                errorEl.textContent = `User is not registered. An email invite has been drafted.`;
+                errorEl.textContent = data.message || `User is not registered. An email invite has been sent directly to them.`;
                 errorEl.style.color = 'var(--brand-600)';
             } else {
                 errorEl.style.display = 'block';
