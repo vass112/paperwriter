@@ -935,6 +935,96 @@ def compile_pdf_online(latex_source, document, cls_source):
 
 
 @api_view(['GET'])
+def _compile_pdf_to_bytes(latex_source, document):
+    import tempfile
+    import subprocess
+    import shutil
+    import base64
+    import copy
+
+    cls_source = _os.path.join(settings.BASE_DIR.parent, 'ieee_format', 'IEEEtran.cls')
+
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tex_path = _os.path.join(tmpdir, 'paper.tex')
+            with open(tex_path, 'w', encoding='utf-8') as f:
+                f.write(latex_source)
+
+            refs = document.references.all()
+            if refs.exists():
+                bib_path = _os.path.join(tmpdir, 'refs.bib')
+                with open(bib_path, 'w', encoding='utf-8') as f:
+                    for ref in refs:
+                        f.write(ref.bibtex + "\n\n")
+
+            if _os.path.exists(cls_source):
+                shutil.copy(cls_source, _os.path.join(tmpdir, 'IEEEtran.cls'))
+
+            for img in document.images.all():
+                if img.image_base64:
+                    img_disk_path = _os.path.join(tmpdir, img.filename.replace(" ", "_"))
+                    with open(img_disk_path, 'wb') as f:
+                        f.write(base64.b64decode(img.image_base64))
+
+            env = copy.copy(_os.environ)
+
+            miktex_paths = [
+                r"C:\Program Files\MiKTeX\miktex\bin\x64",
+                r"C:\Users\DELL\AppData\Local\Programs\MiKTeX\miktex\bin\x64",
+                _os.path.expanduser(r"~\AppData\Local\Programs\MiKTeX\miktex\bin\x64"),
+                r"C:\Program Files (x86)\MiKTeX\miktex\bin",
+                r"C:\texlive\2024\bin\windows",
+                r"C:\texlive\2023\bin\windows",
+                r"/usr/bin",
+                r"/usr/local/bin",
+                r"/Library/TeX/texbin",
+                r"/opt/miktex/bin",
+            ]
+
+            for miktex_path in miktex_paths:
+                if _os.path.exists(miktex_path):
+                    env['PATH'] = miktex_path + _os.pathsep + env.get('PATH', '')
+                    break
+
+            subprocess.run(['pdflatex', '-interaction=nonstopmode', 'paper.tex'], cwd=tmpdir, capture_output=True, timeout=120, env=env)
+
+            if refs.exists():
+                subprocess.run(['bibtex', 'paper'], cwd=tmpdir, capture_output=True, timeout=60, env=env)
+                subprocess.run(['pdflatex', '-interaction=nonstopmode', 'paper.tex'], cwd=tmpdir, capture_output=True, timeout=120, env=env)
+
+            result = subprocess.run(
+                ['pdflatex', '-interaction=nonstopmode', 'paper.tex'],
+                cwd=tmpdir,
+                capture_output=True,
+                timeout=120,
+                env=env
+            )
+
+            pdf_path = _os.path.join(tmpdir, 'paper.pdf')
+            if _os.path.exists(pdf_path):
+                with open(pdf_path, 'rb') as f:
+                    pdf_content = f.read()
+                return pdf_content, None, 200
+            else:
+                stdout = result.stdout.decode('utf-8', errors='replace')
+                stderr = result.stderr.decode('utf-8', errors='replace')
+                print(f"PDF compilation failed.\nSTDOUT: {stdout}\nSTDERR: {stderr}")
+                return None, {'error': 'PDF compilation failed', 'log': stderr, 'full_log': stdout}, 500
+
+    except (FileNotFoundError, OSError):
+        print("Local compiler not found, attempting online compilation fallback...")
+        pdf_content = compile_pdf_online(latex_source, document, cls_source)
+        if pdf_content:
+            return pdf_content, None, 200
+        return None, {'error': 'LaTeX compilation failed', 'message': 'Local compiler not found and online fallback compilation failed.'}, 503
+    except subprocess.TimeoutExpired:
+        print("Local compiler timed out, attempting online compilation fallback...")
+        pdf_content = compile_pdf_online(latex_source, document, cls_source)
+        if pdf_content:
+            return pdf_content, None, 200
+        return None, {'error': 'Compilation timeout'}, 500
+
+@api_view(['GET'])
 def export_pdf(request, doc_id):
     """Compile LaTeX to PDF and return it"""
     try:
@@ -951,132 +1041,46 @@ def export_pdf(request, doc_id):
             return Response({'error': 'Not found'}, status=404)
         latex_source = generate_latex_source(document)
 
-        import tempfile
-        import subprocess
+        pdf_content, err_dict, status_code = _compile_pdf_to_bytes(latex_source, document)
 
-        cls_source = _os.path.join(settings.BASE_DIR.parent, 'ieee_format', 'IEEEtran.cls')
-
-        try:
-            with tempfile.TemporaryDirectory() as tmpdir:
-                tex_path = _os.path.join(tmpdir, 'paper.tex')
-                with open(tex_path, 'w', encoding='utf-8') as f:
-                    f.write(latex_source)
-
-                refs = document.references.all()
-                if refs.exists():
-                    bib_path = _os.path.join(tmpdir, 'refs.bib')
-                    with open(bib_path, 'w', encoding='utf-8') as f:
-                        for ref in refs:
-                            f.write(ref.bibtex + "\n\n")
-
-                import shutil
-                if _os.path.exists(cls_source):
-                    shutil.copy(cls_source, _os.path.join(tmpdir, 'IEEEtran.cls'))
-
-                for img in document.images.all():
-                    if img.image_base64:
-                        img_disk_path = _os.path.join(tmpdir, img.filename.replace(" ", "_"))
-                        import base64
-                        with open(img_disk_path, 'wb') as f:
-                            f.write(base64.b64decode(img.image_base64))
-
-                import copy
-                env = copy.copy(_os.environ)
-
-                miktex_paths = [
-                    r"C:\Program Files\MiKTeX\miktex\bin\x64",
-                    r"C:\Users\DELL\AppData\Local\Programs\MiKTeX\miktex\bin\x64",
-                    _os.path.expanduser(r"~\AppData\Local\Programs\MiKTeX\miktex\bin\x64"),
-                    r"C:\Program Files (x86)\MiKTeX\miktex\bin",
-                    r"C:\texlive\2024\bin\windows",
-                    r"C:\texlive\2023\bin\windows",
-                    r"/usr/bin",
-                    r"/usr/local/bin",
-                    r"/Library/TeX/texbin",
-                    r"/opt/miktex/bin",
-                ]
-
-                for miktex_path in miktex_paths:
-                    if _os.path.exists(miktex_path):
-                        env['PATH'] = miktex_path + _os.pathsep + env.get('PATH', '')
-                        break
-
-                subprocess.run(['pdflatex', '-interaction=nonstopmode', 'paper.tex'], cwd=tmpdir, capture_output=True, timeout=120, env=env)
-
-                if refs.exists():
-                    subprocess.run(['bibtex', 'paper'], cwd=tmpdir, capture_output=True, timeout=60, env=env)
-                    subprocess.run(['pdflatex', '-interaction=nonstopmode', 'paper.tex'], cwd=tmpdir, capture_output=True, timeout=120, env=env)
-
-                result = subprocess.run(
-                    ['pdflatex', '-interaction=nonstopmode', 'paper.tex'],
-                    cwd=tmpdir,
-                    capture_output=True,
-                    timeout=120,
-                    env=env
-                )
-
-                pdf_path = _os.path.join(tmpdir, 'paper.pdf')
-                if _os.path.exists(pdf_path):
-                    with open(pdf_path, 'rb') as f:
-                        pdf_content = f.read()
-
-                    from django.http import HttpResponse
-                    response = HttpResponse(pdf_content, content_type='application/pdf')
-                    response['Content-Disposition'] = f'attachment; filename=paper_{doc_id}.pdf'
-                    return response
-                else:
-                    stdout = result.stdout.decode('utf-8', errors='replace')
-                    stderr = result.stderr.decode('utf-8', errors='replace')
-                    print(f"PDF compilation failed.\nSTDOUT: {stdout}\nSTDERR: {stderr}")
-                    
-                    with transaction.atomic():
-                        credit = DownloadCredit.objects.select_for_update().get(user=request.user)
-                        credit.remaining += 1
-                        credit.save()
-
-                    return Response({
-                        'error': 'PDF compilation failed',
-                        'log': stderr,
-                        'full_log': stdout
-                    }, status=500)
-
-        except (FileNotFoundError, OSError):
-            print("Local compiler not found, attempting online compilation fallback...")
-            pdf_content = compile_pdf_online(latex_source, document, cls_source)
-            if pdf_content:
-                from django.http import HttpResponse
-                response = HttpResponse(pdf_content, content_type='application/pdf')
-                response['Content-Disposition'] = f'attachment; filename=paper_{doc_id}.pdf'
-                return response
-
+        if pdf_content:
+            from django.http import HttpResponse
+            response = HttpResponse(pdf_content, content_type='application/pdf')
+            response['Content-Disposition'] = f'attachment; filename=paper_{doc_id}.pdf'
+            return response
+        else:
             with transaction.atomic():
                 credit = DownloadCredit.objects.select_for_update().get(user=request.user)
                 credit.remaining += 1
                 credit.save()
-
-            return Response({
-                'error': 'LaTeX compilation failed',
-                'message': 'Local compiler not found and online fallback compilation failed.'
-            }, status=503)
-        except subprocess.TimeoutExpired:
-            print("Local compiler timed out, attempting online compilation fallback...")
-            pdf_content = compile_pdf_online(latex_source, document, cls_source)
-            if pdf_content:
-                from django.http import HttpResponse
-                response = HttpResponse(pdf_content, content_type='application/pdf')
-                response['Content-Disposition'] = f'attachment; filename=paper_{doc_id}.pdf'
-                return response
-            
-            with transaction.atomic():
-                credit = DownloadCredit.objects.select_for_update().get(user=request.user)
-                credit.remaining += 1
-                credit.save()
-
-            return Response({'error': 'Compilation timeout'}, status=500)
+            return Response(err_dict, status=status_code)
 
     except Document.DoesNotExist:
         return Response({'error': 'Document not found'}, status=404)
 
+
+@api_view(['GET'])
+def preview_pdf(request, doc_id):
+    """Compile LaTeX to PDF and return it for live preview without deducting credits"""
+    try:
+        document = Document.objects.get(id=doc_id)
+        if document.user and document.user != request.user and not document.collaborators.filter(id=request.user.id).exists():
+            return Response({'error': 'Not found'}, status=404)
+        latex_source = generate_latex_source(document)
+
+        pdf_content, err_dict, status_code = _compile_pdf_to_bytes(latex_source, document)
+
+        if pdf_content:
+            from django.http import HttpResponse
+            response = HttpResponse(pdf_content, content_type='application/pdf')
+            # Inline disposition so the iframe displays it instead of downloading
+            response['Content-Disposition'] = f'inline; filename=preview_{doc_id}.pdf'
+            return response
+        else:
+            return Response(err_dict, status=status_code)
+
+    except Document.DoesNotExist:
+        return Response({'error': 'Document not found'}, status=404)
 
 @api_view(['GET'])
 def export_latex(request, doc_id):

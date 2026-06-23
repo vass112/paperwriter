@@ -228,7 +228,11 @@
                         <button class="preview-tab-btn active" id="tab-btn-preview" onclick="switchRightPanelTab('preview')" style="background: none; border: none; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--brand-900); cursor: pointer; border-bottom: 2px solid var(--brand-950); padding: 8px 0; outline: none;">Preview</button>
                         <button class="preview-tab-btn" id="tab-btn-comments" onclick="switchRightPanelTab('comments')" style="background: none; border: none; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--brand-400); cursor: pointer; border-bottom: 2px solid transparent; padding: 8px 0; outline: none;">Comments (<span id="comments-count">0</span>)</button>
                     </div>
-                    <div class="preview-header-right" id="preview-zoom-controls">
+                    <div class="preview-header-right" id="preview-zoom-controls" style="display: flex; align-items: center; gap: 8px;">
+                        <label style="display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--brand-500); cursor: pointer;">
+                            <input type="checkbox" id="auto-compile-toggle" style="margin:0;"> Auto-Compile
+                        </label>
+                        <button class="btn-primary" id="compile-pdf-btn" onclick="refreshPdfPreview()" style="padding: 4px 10px; font-size: 11px; width: auto; height: 26px; border-radius: 4px; margin-right: 8px;">Compile PDF</button>
                         <button class="preview-zoom-btn" title="Zoom In">
                             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7"></path></svg>
                         </button>
@@ -240,8 +244,12 @@
 
                 <!-- Tab content for Preview -->
                 <div id="tab-preview" class="right-panel-tab-content active" style="flex: 1; display: flex; flex-direction: column; height: calc(100% - 40px); overflow: hidden;">
-                    <div class="preview-frame-container" style="flex: 1; height: 100%;">
-                        <iframe id="latex-preview"></iframe>
+                    <div class="preview-frame-container" style="flex: 1; height: 100%; position: relative;">
+                        <iframe id="latex-preview" style="width: 100%; height: 100%; border: none;"></iframe>
+                        <div id="preview-loading-overlay" style="display: none; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(255,255,255,0.8); backdrop-filter: blur(2px); align-items: center; justify-content: center; flex-direction: column; z-index: 10;">
+                            <div class="spinner" style="width: 32px; height: 32px; border: 3px solid rgba(0,0,0,0.1); border-top-color: var(--brand-600); border-radius: 50%; animation: spin 1s linear infinite;"></div>
+                            <span style="margin-top: 12px; font-size: 13px; color: var(--brand-600); font-weight: 500;">Compiling... Please wait</span>
+                        </div>
                     </div>
                     <!-- Preview Footer Stats -->
                     <div class="preview-footer" id="preview-footer">

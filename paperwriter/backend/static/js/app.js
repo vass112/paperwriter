@@ -1068,13 +1068,16 @@ window.moveSection = moveSection;
 // LATEX PREVIEW
 // ============================================================
 
-async function updateLatexPreview() {
+let autoCompileDebounceTimer = null;
+
+async function refreshPdfPreview() {
     if (!currentDocId) return;
 
-    try {
-        // Try to get compiled PDF first
-        const pdfResponse = await fetch(`/api/document/${currentDocId}/export/pdf`);
+    const overlay = document.getElementById('preview-loading-overlay');
+    if (overlay) overlay.style.display = 'flex';
 
+    try {
+        const pdfResponse = await fetch(`/api/document/${currentDocId}/preview/pdf`);
         if (pdfResponse.ok) {
             const blob = await pdfResponse.blob();
             const url = URL.createObjectURL(blob);
@@ -1083,27 +1086,57 @@ async function updateLatexPreview() {
                 iframe.src = url + '#toolbar=0&view=FitH&scrollbar=0';
             }
         } else {
-            // Fallback to HTML rendering
-            const response = await fetch(`/api/document/${currentDocId}/latex`);
-            const data = await response.json();
-
-            if (data.latex) {
-                renderLatexAsHTML(data.latex);
-            }
+            console.error('Failed to update PDF preview:', pdfResponse.status);
+            await renderFastHtmlPreview();
         }
     } catch (e) {
-        console.error('Failed to update preview:', e);
-        try {
-            const response = await fetch(`/api/document/${currentDocId}/latex`);
-            const data = await response.json();
-            if (data.latex) {
-                renderLatexAsHTML(data.latex);
-            }
-        } catch (e2) {
-            console.error('Fallback also failed:', e2);
-        }
+        console.error('Failed to update PDF preview:', e);
+        await renderFastHtmlPreview();
+    } finally {
+        if (overlay) overlay.style.display = 'none';
     }
 }
+
+async function renderFastHtmlPreview() {
+    try {
+        const response = await fetch(`/api/document/${currentDocId}/latex`);
+        const data = await response.json();
+        if (data.latex) {
+            renderLatexAsHTML(data.latex);
+        }
+    } catch (e) {
+        console.error('HTML fallback failed:', e);
+    }
+}
+
+async function updateLatexPreview() {
+    if (!currentDocId) return;
+
+    // Do instant HTML preview
+    await renderFastHtmlPreview();
+
+    // Check Auto-Compile toggle
+    const autoCompileToggle = document.getElementById('auto-compile-toggle');
+    if (autoCompileToggle && autoCompileToggle.checked) {
+        clearTimeout(autoCompileDebounceTimer);
+        autoCompileDebounceTimer = setTimeout(() => {
+            refreshPdfPreview();
+        }, 3000); // 3 seconds debounce
+    }
+}
+
+// Restore auto-compile preference
+document.addEventListener('DOMContentLoaded', () => {
+    const toggle = document.getElementById('auto-compile-toggle');
+    if (toggle) {
+        const pref = localStorage.getItem('autoCompilePreference');
+        if (pref === 'true') toggle.checked = true;
+        toggle.addEventListener('change', (e) => {
+            localStorage.setItem('autoCompilePreference', e.target.checked);
+            if (e.target.checked) refreshPdfPreview();
+        });
+    }
+});
 
 function renderLatexAsHTML(latexSource) {
     const iframe = document.getElementById('latex-preview');
