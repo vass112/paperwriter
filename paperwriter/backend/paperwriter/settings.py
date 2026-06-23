@@ -176,6 +176,9 @@ if not DEBUG:
     SECURE_BROWSER_XSS_FILTER = True
     X_FRAME_OPTIONS = 'DENY'
 
+# Fix Google Sign-In popup
+SECURE_CROSS_ORIGIN_OPENER_POLICY = 'same-origin-allow-popups'
+
 # === DRF CONFIGURATION ===
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
