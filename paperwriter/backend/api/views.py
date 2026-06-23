@@ -937,7 +937,6 @@ def compile_pdf_online(latex_source, document, cls_source):
         return None
 
 
-@api_view(['GET'])
 def _compile_pdf_to_bytes(latex_source, document):
     import tempfile
     import subprocess
