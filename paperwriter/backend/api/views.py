@@ -653,7 +653,7 @@ def generate_latex_source(document):
     emitted_image_ids = set()
 
     def emit_figure(img):
-        filename = img.filename
+        filename = img.filename.replace(" ", "_")
         label = img.label or f'fig{img.id}'
         caption = img.caption or ''
         width = max(0.1, min(1.0, img.width or 0.9))
@@ -908,7 +908,7 @@ def compile_pdf_online(latex_source, document, cls_source):
     for img in document.images.all():
         if img.image_base64:
             resources.append({
-                "path": img.filename,
+                "path": img.filename.replace(" ", "_"),
                 "file": img.image_base64
             })
 
@@ -957,9 +957,6 @@ def export_pdf(request, doc_id):
         cls_source = _os.path.join(settings.BASE_DIR.parent, 'ieee_format', 'IEEEtran.cls')
 
         try:
-            if 'VERCEL' in _os.environ:
-                raise FileNotFoundError("Force online compile on Vercel")
-
             with tempfile.TemporaryDirectory() as tmpdir:
                 tex_path = _os.path.join(tmpdir, 'paper.tex')
                 with open(tex_path, 'w', encoding='utf-8') as f:
@@ -978,7 +975,7 @@ def export_pdf(request, doc_id):
 
                 for img in document.images.all():
                     if img.image_base64:
-                        img_disk_path = _os.path.join(tmpdir, img.filename)
+                        img_disk_path = _os.path.join(tmpdir, img.filename.replace(" ", "_"))
                         import base64
                         with open(img_disk_path, 'wb') as f:
                             f.write(base64.b64decode(img.image_base64))
@@ -990,6 +987,13 @@ def export_pdf(request, doc_id):
                     r"C:\Program Files\MiKTeX\miktex\bin\x64",
                     r"C:\Users\DELL\AppData\Local\Programs\MiKTeX\miktex\bin\x64",
                     _os.path.expanduser(r"~\AppData\Local\Programs\MiKTeX\miktex\bin\x64"),
+                    r"C:\Program Files (x86)\MiKTeX\miktex\bin",
+                    r"C:\texlive\2024\bin\windows",
+                    r"C:\texlive\2023\bin\windows",
+                    r"/usr/bin",
+                    r"/usr/local/bin",
+                    r"/Library/TeX/texbin",
+                    r"/opt/miktex/bin",
                 ]
 
                 for miktex_path in miktex_paths:
@@ -1109,7 +1113,7 @@ def export_latex(request, doc_id):
                     import base64
                     try:
                         img_data = base64.b64decode(img.image_base64)
-                        zip_file.writestr(img.filename, img_data)
+                        zip_file.writestr(img.filename.replace(" ", "_"), img_data)
                     except Exception:
                         pass
 
