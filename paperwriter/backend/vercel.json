@@ -3,7 +3,10 @@
   "builds": [
     {
       "src": "paperwriter/wsgi.py",
-      "use": "@vercel/python"
+      "use": "@vercel/python",
+      "config": {
+        "maxDuration": 60
+      }
     }
   ],
   "routes": [
@@ -12,11 +15,6 @@
       "dest": "paperwriter/wsgi.py"
     }
   ],
-  "functions": {
-    "paperwriter/wsgi.py": {
-      "maxDuration": 60
-    }
-  },
   "env": {
     "DJANGO_SETTINGS_MODULE": "paperwriter.settings"
   }
