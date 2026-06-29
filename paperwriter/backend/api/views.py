@@ -256,10 +256,12 @@ class DocumentViewSet(viewsets.ModelViewSet):
             return Response({'error': 'You cannot share a document with yourself.'}, status=status.HTTP_400_BAD_REQUEST)
             
         try:
-            user_to_add = User.objects.get(email=email)
+            user_to_add = User.objects.get(email__iexact=email)
             document.collaborators.add(user_to_add)
             return Response({'message': f'Document shared with {email}.'}, status=status.HTTP_200_OK)
         except User.DoesNotExist:
+            from .models import DocumentInvite
+            DocumentInvite.objects.get_or_create(document=document, email=email)
             return Response({
                 'error': f'No user found with email {email}.',
                 'unregistered': True,

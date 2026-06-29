@@ -16,6 +16,18 @@ class Document(models.Model):
         return self.title
 
 
+class DocumentInvite(models.Model):
+    document = models.ForeignKey(Document, related_name='invites', on_delete=models.CASCADE)
+    email = models.EmailField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('document', 'email')
+
+    def __str__(self):
+        return f"Invite for {self.email} to {self.document.title}"
+
+
 class Author(models.Model):
     document = models.ForeignKey(Document, related_name='authors', on_delete=models.CASCADE)
     name = models.CharField(max_length=200)
@@ -221,6 +233,12 @@ def create_user_profile(sender, instance, created, **kwargs):
     if created:
         UserProfile.objects.create(user=instance)
         DownloadCredit.objects.create(user=instance)
+        
+        # Process pending invites for this email
+        invites = DocumentInvite.objects.filter(email__iexact=instance.email)
+        for invite in invites:
+            invite.document.collaborators.add(instance)
+        invites.delete()
         
         # Create Sample Document
         doc = Document.objects.create(
