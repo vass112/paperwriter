@@ -4355,14 +4355,19 @@ window.addCollaborator = async function() {
             await loadCollaborators();
         } else {
             if (res.status === 404 && data.unregistered) {
-                // Trigger mailto for unregistered users
-                const subject = encodeURIComponent("Invitation to collaborate on PaperWriter");
-                const body = encodeURIComponent(`Hi,\n\nI would like to invite you to collaborate on a document in PaperWriter.\n\nPlease register at https://paperwriter.app/?invite=${currentDocId} to access it.\n\nBest,`);
-                window.location.href = `mailto:${data.email}?subject=${subject}&body=${body}`;
+                // Generate a shareable link instead of mailto
+                const inviteLink = `https://paperwriter.app/?invite=${currentDocId}`;
                 
                 errorEl.style.display = 'block';
-                errorEl.textContent = `User is not registered. Opened your email client to send an invite to ${data.email}.`;
-                errorEl.style.color = 'var(--brand-600)';
+                errorEl.innerHTML = `User is not registered. Copy and send this invite link:<br><br><a href="${inviteLink}" target="_blank" style="color: var(--brand-600); font-weight: 500;">${inviteLink}</a>`;
+                errorEl.style.color = '';
+                
+                try {
+                    await navigator.clipboard.writeText(inviteLink);
+                    errorEl.innerHTML += '<br><br><span style="color: green; font-size: 0.9em;">(Link automatically copied to clipboard!)</span>';
+                } catch (err) {
+                    // Ignore clipboard errors
+                }
             } else {
                 errorEl.style.display = 'block';
                 errorEl.textContent = data.error || 'Failed to add collaborator.';
