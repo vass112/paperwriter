@@ -4355,8 +4355,13 @@ window.addCollaborator = async function() {
             await loadCollaborators();
         } else {
             if (res.status === 404 && data.unregistered) {
+                // Trigger mailto for unregistered users
+                const subject = encodeURIComponent("Invitation to collaborate on PaperWriter");
+                const body = encodeURIComponent(`Hi,\n\nI would like to invite you to collaborate on a document in PaperWriter.\n\nPlease register at https://paperwriter.app/?invite=${currentDocId} to access it.\n\nBest,`);
+                window.location.href = `mailto:${data.email}?subject=${subject}&body=${body}`;
+                
                 errorEl.style.display = 'block';
-                errorEl.textContent = data.message || `User is not registered. An email invite has been sent directly to them.`;
+                errorEl.textContent = `User is not registered. Opened your email client to send an invite to ${data.email}.`;
                 errorEl.style.color = 'var(--brand-600)';
             } else {
                 errorEl.style.display = 'block';

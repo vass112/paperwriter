@@ -260,27 +260,11 @@ class DocumentViewSet(viewsets.ModelViewSet):
             document.collaborators.add(user_to_add)
             return Response({'message': f'Document shared with {email}.'}, status=status.HTTP_200_OK)
         except User.DoesNotExist:
-            from django.core.mail import send_mail
-            from django.conf import settings
-            try:
-                invite_link = f"{settings.FRONTEND_URL}?invite={document.id}"
-                message = f"Hi,\n\nI would like to invite you to collaborate on a document in PaperWriter.\n\nPlease register at {invite_link} to access it.\n\nBest,"
-                send_mail(
-                    subject='Invitation to collaborate on PaperWriter',
-                    message=message,
-                    from_email=settings.DEFAULT_FROM_EMAIL,
-                    recipient_list=[email],
-                    fail_silently=False,
-                )
-                return Response({
-                    'message': f'No user found with email {email}. An invitation email has been sent directly to them.',
-                    'unregistered': True
-                }, status=status.HTTP_404_NOT_FOUND)
-            except Exception as e:
-                return Response({
-                    'error': f'User not found and failed to send invite email: {str(e)}',
-                    'unregistered': True
-                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({
+                'error': f'No user found with email {email}.',
+                'unregistered': True,
+                'email': email
+            }, status=status.HTTP_404_NOT_FOUND)
 
     @action(detail=True, methods=['post'])
     def unshare(self, request, pk=None):
