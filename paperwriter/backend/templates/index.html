@@ -1218,42 +1218,138 @@
     {% endif %}
 
     <!-- Document Settings Modal -->
-    <div id="doc-settings-modal" class="modal-overlay" style="display: none; z-index: 10000; align-items: center; justify-content: center;">
-        <div class="modal-content" style="max-width: 480px; width: 90%; padding: 24px; border-radius: var(--radius-lg); background: #ffffff; border: 1px solid var(--border-light); box-shadow: 0 20px 40px rgba(0,0,0,0.15);">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
-                <h3 style="margin: 0; font-family: 'Lora', serif; font-size: 20px; color: var(--brand-950);">Document Settings</h3>
-                <button onclick="closeDocSettingsModal()" class="btn-ghost" style="padding: 4px; border: none; background: transparent; cursor: pointer;">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                </button>
-            </div>
-            
-            <div style="margin-bottom: 20px;">
-                <label style="display: block; font-size: 12px; font-weight: 600; color: var(--brand-700); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.05em;">LaTeX Template</label>
-                <select id="doc-template-select" class="modal-input" style="width: 100%; font-size: 14px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-md); outline: none; background: #ffffff; color: var(--brand-900); margin-bottom: 12px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);" onchange="window.updateTemplateOptions()">
-                    <option value="ieee">IEEE</option>
-                    <option value="acm">ACM</option>
-                    <option value="elsevier">Elsevier</option>
-                    <option value="springer-lncs">Springer LNCS</option>
-                    <option value="apa">APA 7th Edition</option>
-                    <option value="mla">MLA 9th Edition</option>
-                </select>
+    <style>
+        .template-option-item {
+            display: flex;
+            align-items: flex-start;
+            padding: 12px 16px;
+            cursor: pointer;
+            border-bottom: 1px solid var(--border-light);
+            transition: all 0.2s;
+            border-left: 3px solid transparent;
+        }
+        .template-option-item:hover {
+            background-color: var(--brand-50);
+        }
+        .template-option-item.active {
+            background-color: var(--brand-50);
+            border-left: 3px solid var(--brand-600);
+        }
+        .template-icon {
+            font-size: 20px;
+            margin-right: 12px;
+            opacity: 0.7;
+        }
+        .template-name {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--brand-900);
+            margin-bottom: 4px;
+        }
+        .template-desc {
+            font-size: 11px;
+            color: var(--brand-500);
+            line-height: 1.3;
+        }
+    </style>
+    <div id="doc-settings-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content doc-settings-modal-content" style="max-width: 800px; width: 90%;">
+            <div class="modal-header">
+                <h3>Document Settings</h3>
+                <span class="close-modal" onclick="closeDocSettingsModal()">&times;</span>
             </div>
 
-            <div style="margin-bottom: 20px;">
-                <label style="display: block; font-size: 12px; font-weight: 600; color: var(--brand-700); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.05em;">Format Style</label>
-                <select id="doc-template-style-select" class="modal-input" style="width: 100%; font-size: 14px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-md); outline: none; background: #ffffff; color: var(--brand-900); box-shadow: 0 1px 2px rgba(0,0,0,0.05);" onchange="window.saveDocumentTemplate()">
-                    <!-- Options populated via JS -->
-                </select>
-            </div>
+            <div class="modal-body-split">
+                <!-- Left: List of templates -->
+                <div class="modal-sidebar" style="width: 280px; flex-shrink: 0;">
+                    <div class="modal-sidebar-header mini">
+                        <h4>LaTeX Templates</h4>
+                    </div>
+                    <div id="template-options-list" class="modal-list scroll-minimal">
+                        <div class="template-option-item active" onclick="selectTemplateTab('ieee')" data-template="ieee">
+                            <div class="template-icon">📄</div>
+                            <div class="template-info">
+                                <div class="template-name">IEEE</div>
+                                <div class="template-desc">Institute of Electrical and Electronics Engineers</div>
+                            </div>
+                        </div>
+                        <div class="template-option-item" onclick="selectTemplateTab('acm')" data-template="acm">
+                            <div class="template-icon">📄</div>
+                            <div class="template-info">
+                                <div class="template-name">ACM</div>
+                                <div class="template-desc">Association for Computing Machinery</div>
+                            </div>
+                        </div>
+                        <div class="template-option-item" onclick="selectTemplateTab('elsevier')" data-template="elsevier">
+                            <div class="template-icon">📄</div>
+                            <div class="template-info">
+                                <div class="template-name">Elsevier</div>
+                                <div class="template-desc">Elsevier Science Publishers</div>
+                            </div>
+                        </div>
+                        <div class="template-option-item" onclick="selectTemplateTab('springer-lncs')" data-template="springer-lncs">
+                            <div class="template-icon">📄</div>
+                            <div class="template-info">
+                                <div class="template-name">Springer LNCS</div>
+                                <div class="template-desc">Lecture Notes in Computer Science</div>
+                            </div>
+                        </div>
+                        <div class="template-option-item" onclick="selectTemplateTab('apa')" data-template="apa">
+                            <div class="template-icon">📄</div>
+                            <div class="template-info">
+                                <div class="template-name">APA 7th Edition</div>
+                                <div class="template-desc">American Psychological Association</div>
+                            </div>
+                        </div>
+                        <div class="template-option-item" onclick="selectTemplateTab('mla')" data-template="mla">
+                            <div class="template-icon">📄</div>
+                            <div class="template-info">
+                                <div class="template-name">MLA 9th Edition</div>
+                                <div class="template-desc">Modern Language Association</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
 
-            <div style="margin-bottom: 24px;">
-                <label style="display: block; font-size: 12px; font-weight: 600; color: var(--brand-700); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.05em;">Index Terms / Keywords</label>
-                <input type="text" id="doc-index-terms" class="modal-input" style="width: 100%; font-size: 14px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-md); outline: none; background: #ffffff; color: var(--brand-900); box-shadow: 0 1px 2px rgba(0,0,0,0.05);" placeholder="e.g. machine learning, data science">
-                <p style="font-size: 11px; color: var(--brand-500); margin-top: 6px;">Separate terms with commas. Will be injected into the abstract or keywords block depending on the template.</p>
-            </div>
-            
-            <div style="display: flex; justify-content: flex-end;">
-                <button onclick="closeDocSettingsModal()" class="btn-primary" style="padding: 10px 20px; font-size: 14px; border-radius: var(--radius-md);">Done</button>
+                <!-- Right: Form and Preview -->
+                <div class="modal-main">
+                    <div class="modal-form-container scroll-minimal" style="padding: 24px;">
+                        <!-- Hidden input to store current template value since we removed the select element -->
+                        <input type="hidden" id="doc-template-select" value="ieee">
+                        
+                        <div style="display: flex; gap: 24px; margin-bottom: 24px; flex-wrap: wrap;">
+                            <!-- Preview Image -->
+                            <div style="flex: 0 0 200px;">
+                                <div style="width: 100%; height: 260px; background: var(--bg-color); border: 1px solid var(--border-light); border-radius: var(--radius-md); overflow: hidden; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+                                    <img id="template-preview-img" src="/static/images/templates/ieee-preview.png" style="width: 100%; height: 100%; object-fit: cover;">
+                                </div>
+                            </div>
+                            
+                            <!-- Form Settings -->
+                            <div style="flex: 1; min-width: 250px;">
+                                <h4 id="template-settings-title" style="margin-top: 0; margin-bottom: 16px; font-size: 18px; color: var(--brand-900);">IEEE Format Settings</h4>
+                                
+                                <div class="modal-input-group">
+                                    <label>Format Style</label>
+                                    <select id="doc-template-style-select" class="modal-input">
+                                        <!-- Options populated via JS -->
+                                    </select>
+                                </div>
+
+                                <div class="modal-input-group">
+                                    <label>Index Terms / Keywords</label>
+                                    <input type="text" id="doc-index-terms" class="modal-input" placeholder="e.g. machine learning, data science">
+                                    <p style="font-size: 11px; color: var(--brand-500); margin-top: 6px;">Separate terms with commas. Will be injected into the abstract or keywords block depending on the template.</p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="modal-actions-footer" style="border-top: 1px solid var(--border-light); padding-top: 16px;">
+                            <button type="button" class="btn-secondary" onclick="closeDocSettingsModal()" style="width:auto; padding: 8px 16px;">Cancel</button>
+                            <button type="button" class="btn-primary" onclick="window.saveDocumentTemplate(); closeDocSettingsModal();" style="width:auto; padding: 8px 16px;">Save Template</button>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>

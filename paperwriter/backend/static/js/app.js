@@ -318,6 +318,37 @@ const templateStyles = {
     ]
 };
 
+window.selectTemplateTab = function(templateId) {
+    // Update hidden input
+    const selectEl = document.getElementById('doc-template-select');
+    if (selectEl) selectEl.value = templateId;
+    
+    // Update UI active state
+    document.querySelectorAll('.template-option-item').forEach(el => {
+        el.classList.remove('active');
+    });
+    const activeEl = document.querySelector(`.template-option-item[data-template="${templateId}"]`);
+    if (activeEl) {
+        activeEl.classList.add('active');
+        
+        // Update Title
+        const titleEl = document.getElementById('template-settings-title');
+        if (titleEl) {
+            const tText = activeEl.querySelector('.template-name').textContent;
+            titleEl.textContent = `${tText} Format Settings`;
+        }
+    }
+    
+    // Update Image Preview
+    const imgEl = document.getElementById('template-preview-img');
+    if (imgEl) {
+        imgEl.src = `/static/images/templates/${templateId}-preview.png`;
+    }
+    
+    // Update style options
+    window.updateTemplateOptions();
+};
+
 window.updateTemplateOptions = function(selectedStyle = null) {
     const templateSelect = document.getElementById('doc-template-select');
     const styleSelect = document.getElementById('doc-template-style-select');
@@ -341,16 +372,14 @@ window.updateTemplateOptions = function(selectedStyle = null) {
     }
     
     // Update top badge text
-    const badgeTextEl = document.getElementById('doc-format-badge-text');
-    if (badgeTextEl && templateSelect.selectedIndex >= 0 && styleSelect.selectedIndex >= 0) {
-        const tText = templateSelect.options[templateSelect.selectedIndex].text;
-        const sText = styleSelect.options[styleSelect.selectedIndex].text;
-        badgeTextEl.textContent = `${tText} (${sText})`;
-    }
-
-    // Only trigger save if not called during initialization
-    if (typeof selectedStyle !== 'string' && currentDocId) {
-        window.saveDocumentTemplate();
+    if (typeof selectedStyle !== 'string') {
+        const badgeTextEl = document.getElementById('doc-format-badge-text');
+        const activeTab = document.querySelector(`.template-option-item[data-template="${template}"]`);
+        if (badgeTextEl && activeTab && styleSelect.selectedIndex >= 0) {
+            const tText = activeTab.querySelector('.template-name').textContent;
+            const sText = styleSelect.options[styleSelect.selectedIndex].text;
+            badgeTextEl.textContent = `${tText} (${sText})`;
+        }
     }
 };
 
@@ -358,25 +387,32 @@ window.saveDocumentTemplate = async function() {
     if (!currentDocId) return;
     const templateSelect = document.getElementById('doc-template-select');
     const styleSelect = document.getElementById('doc-template-style-select');
+    const indexTermsEl = document.getElementById('doc-index-terms');
     const template = templateSelect.value;
     const style = styleSelect.value;
     
     // Update top badge text
     const badgeTextEl = document.getElementById('doc-format-badge-text');
-    if (badgeTextEl && templateSelect.selectedIndex >= 0 && styleSelect.selectedIndex >= 0) {
-        const tText = templateSelect.options[templateSelect.selectedIndex].text;
+    const activeTab = document.querySelector(`.template-option-item[data-template="${template}"]`);
+    if (badgeTextEl && activeTab && styleSelect.selectedIndex >= 0) {
+        const tText = activeTab.querySelector('.template-name').textContent;
         const sText = styleSelect.options[styleSelect.selectedIndex].text;
         badgeTextEl.textContent = `${tText} (${sText})`;
     }
     
     try {
+        const payload = { template: template, template_style: style };
+        if (indexTermsEl) {
+            payload.index_terms = indexTermsEl.value;
+        }
+
         const response = await fetch(`/api/documents/${currentDocId}/`, {
             method: 'PATCH',
             headers: { 
                 'Content-Type': 'application/json',
                 'X-CSRFToken': getCsrfToken()
             },
-            body: JSON.stringify({ template: template, template_style: style })
+            body: JSON.stringify(payload)
         });
         
         if (!response.ok) throw new Error('Failed to update template');
@@ -786,13 +822,20 @@ async function loadDocument(id) {
         // Update document format
         const templateSelect = document.getElementById('doc-template-select');
         const styleSelect = document.getElementById('doc-template-style-select');
-        if (templateSelect && styleSelect) {
-            templateSelect.value = doc.template || 'ieee';
-            window.updateTemplateOptions(doc.template_style || 'conference');
+        if (templateSelect) {
+            const templateId = doc.template || 'ieee';
+            if (window.selectTemplateTab) {
+                window.selectTemplateTab(templateId);
+                // Also pass the style correctly
+                window.updateTemplateOptions(doc.template_style || 'conference');
+            } else {
+                templateSelect.value = templateId;
+                window.updateTemplateOptions(doc.template_style || 'conference');
+            }
             
             const isReadOnly = (window.currentUserRole === 'viewer' || window.currentUserRole === 'commenter');
             templateSelect.disabled = isReadOnly;
-            styleSelect.disabled = isReadOnly;
+            if (styleSelect) styleSelect.disabled = isReadOnly;
         }
 
         const nav = document.getElementById('section-nav');

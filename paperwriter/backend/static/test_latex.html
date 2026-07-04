@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <script src="https://cdn.jsdelivr.net/npm/latex.js/dist/latex.js"></script>
+</head>
+<body>
+    <div id="out"></div>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            try {
+                var latexSource = "\\documentclass{article}\\begin{document}Hello \\textbf{World}\\end{document}";
+                var generator = new latexjs.HtmlGenerator({ hyphenate: false });
+                var parsed = latexjs.parse(latexSource, { generator: generator });
+                document.getElementById('out').appendChild(parsed.domFragment());
+                console.log("Success");
+            } catch (e) {
+                console.error(e);
+            }
+        });
+    </script>
+</body>
+</html>
