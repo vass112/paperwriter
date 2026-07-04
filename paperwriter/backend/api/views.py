@@ -64,6 +64,20 @@ def sanitize_html(html_content):
     return cleaned
 
 
+def can_view_document(document, user):
+    if not user.is_authenticated:
+        return False
+    if document.user == user:
+        return True
+    if document.collaborators.filter(id=user.id).exists():
+        return True
+    if document.commenters.filter(id=user.id).exists():
+        return True
+    if document.viewers.filter(id=user.id).exists():
+        return True
+    return False
+
+
 def home(request):
     return render(request, 'index.html', {'google_client_id': settings.GOOGLE_CLIENT_ID})
 
@@ -186,7 +200,12 @@ class DocumentViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         if self.request.user.is_authenticated:
             from django.db.models import Q
-            return Document.objects.filter(Q(user=self.request.user) | Q(collaborators=self.request.user)).distinct()
+            return Document.objects.filter(
+                Q(user=self.request.user) | 
+                Q(collaborators=self.request.user) |
+                Q(commenters=self.request.user) |
+                Q(viewers=self.request.user)
+            ).distinct()
         return Document.objects.none()
 
     def perform_create(self, serializer):
@@ -249,19 +268,34 @@ class DocumentViewSet(viewsets.ModelViewSet):
             return Response({'error': 'Only the document owner can share it.'}, status=status.HTTP_403_FORBIDDEN)
         
         email = request.data.get('email')
+        role = request.data.get('role', 'editor')
         if not email:
             return Response({'error': 'Email is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        if role not in ['viewer', 'commenter', 'editor']:
+            return Response({'error': 'Invalid role.'}, status=status.HTTP_400_BAD_REQUEST)
         
         if email == request.user.email:
             return Response({'error': 'You cannot share a document with yourself.'}, status=status.HTTP_400_BAD_REQUEST)
             
         try:
             user_to_add = User.objects.get(email__iexact=email)
-            document.collaborators.add(user_to_add)
-            return Response({'message': f'Document shared with {email}.'}, status=status.HTTP_200_OK)
+            document.collaborators.remove(user_to_add)
+            document.commenters.remove(user_to_add)
+            document.viewers.remove(user_to_add)
+            
+            if role == 'viewer':
+                document.viewers.add(user_to_add)
+            elif role == 'commenter':
+                document.commenters.add(user_to_add)
+            else:
+                document.collaborators.add(user_to_add)
+                
+            return Response({'message': f'Document shared with {email} as {role}.'}, status=status.HTTP_200_OK)
         except User.DoesNotExist:
             from .models import DocumentInvite
-            DocumentInvite.objects.get_or_create(document=document, email=email)
+            invite, _ = DocumentInvite.objects.get_or_create(document=document, email=email)
+            invite.role = role
+            invite.save()
             return Response({
                 'error': f'No user found with email {email}.',
                 'unregistered': True,
@@ -279,18 +313,32 @@ class DocumentViewSet(viewsets.ModelViewSet):
             return Response({'error': 'Email is required.'}, status=status.HTTP_400_BAD_REQUEST)
             
         try:
-            user_to_remove = User.objects.get(email=email)
+            user_to_remove = User.objects.get(email__iexact=email)
         except User.DoesNotExist:
             return Response({'error': 'User not found.'}, status=status.HTTP_404_NOT_FOUND)
             
         document.collaborators.remove(user_to_remove)
+        document.commenters.remove(user_to_remove)
+        document.viewers.remove(user_to_remove)
         return Response({'success': True, 'message': f'Collaborator {email} removed.'})
 
     @action(detail=True, methods=['get'])
     def collaborators(self, request, pk=None):
         document = self.get_object()
-        collabs = document.collaborators.all()
-        return Response(UserSerializer(collabs, many=True).data)
+        collabs = []
+        for user in document.collaborators.all():
+            data = UserSerializer(user).data
+            data['role'] = 'editor'
+            collabs.append(data)
+        for user in document.commenters.all():
+            data = UserSerializer(user).data
+            data['role'] = 'commenter'
+            collabs.append(data)
+        for user in document.viewers.all():
+            data = UserSerializer(user).data
+            data['role'] = 'viewer'
+            collabs.append(data)
+        return Response(collabs)
 
     @action(detail=True, methods=['post'])
     def heartbeat(self, request, pk=None):
@@ -339,7 +387,12 @@ class SectionViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         from django.db.models import Q
-        user_docs = Document.objects.filter(Q(user=self.request.user) | Q(collaborators=self.request.user)).distinct()
+        user_docs = Document.objects.filter(
+            Q(user=self.request.user) | 
+            Q(collaborators=self.request.user) |
+            Q(commenters=self.request.user) |
+            Q(viewers=self.request.user)
+        ).distinct()
         qs = super().get_queryset().filter(document__in=user_docs)
         doc_id = self.request.query_params.get('document')
         if doc_id:
@@ -423,7 +476,12 @@ class AuthorViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         from django.db.models import Q
-        user_docs = Document.objects.filter(Q(user=self.request.user) | Q(collaborators=self.request.user)).distinct()
+        user_docs = Document.objects.filter(
+            Q(user=self.request.user) | 
+            Q(collaborators=self.request.user) |
+            Q(commenters=self.request.user) |
+            Q(viewers=self.request.user)
+        ).distinct()
         return super().get_queryset().filter(document__in=user_docs)
 
     def perform_create(self, serializer):
@@ -448,7 +506,12 @@ class PaperImageViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         from django.db.models import Q
-        user_docs = Document.objects.filter(Q(user=self.request.user) | Q(collaborators=self.request.user)).distinct()
+        user_docs = Document.objects.filter(
+            Q(user=self.request.user) | 
+            Q(collaborators=self.request.user) |
+            Q(commenters=self.request.user) |
+            Q(viewers=self.request.user)
+        ).distinct()
         qs = super().get_queryset().filter(document__in=user_docs)
         doc_id = self.request.query_params.get('document')
         if doc_id:
@@ -493,7 +556,12 @@ class ReferenceViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         from django.db.models import Q
-        user_docs = Document.objects.filter(Q(user=self.request.user) | Q(collaborators=self.request.user)).distinct()
+        user_docs = Document.objects.filter(
+            Q(user=self.request.user) | 
+            Q(collaborators=self.request.user) |
+            Q(commenters=self.request.user) |
+            Q(viewers=self.request.user)
+        ).distinct()
         qs = super().get_queryset().filter(document__in=user_docs)
         doc_id = self.request.query_params.get('document')
         if doc_id:
@@ -575,293 +643,13 @@ import io
 import os as _os
 from django.conf import settings
 
+from .templates.registry import TemplateRegistry
 
 def generate_latex_source(document):
     """Generate complete LaTeX source code for a document"""
-    latex_content = [
-        r"\documentclass[conference]{IEEEtran}",
-        r"\IEEEoverridecommandlockouts",
-        r"\usepackage{cite}",
-        r"\usepackage{amsmath,amssymb,amsfonts}",
-        r"\usepackage{algorithmic}",
-        r"\usepackage{graphicx}",
-        r"\usepackage{booktabs}",
-        r"\usepackage{textcomp}",
-        r"\usepackage{xcolor}",
-        r"\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em",
-        r"    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}",
-        r"\begin{document}",
-        r"\sloppy",
-        "",
-        f"\\title{{{document.title}}}",
-        "",
-    ]
+    template = TemplateRegistry.get(document.template)
+    return template.generate(document)
 
-    authors = document.authors.all().order_by('order')
-    if authors.exists():
-        author_blocks = []
-        for idx, author in enumerate(authors, 1):
-            ordinal = f"{idx}\\textsuperscript{{st}}" if idx == 1 else f"{idx}\\textsuperscript{{nd}}" if idx == 2 else f"{idx}\\textsuperscript{{rd}}" if idx == 3 else f"{idx}\\textsuperscript{{th}}"
-
-            author_block = f"\\IEEEauthorblockN{{{ordinal} {author.name}}}"
-            affiliation_parts = []
-            if author.department:
-                affiliation_parts.append(f"\\textit{{{author.department}}}")
-            if author.organization:
-                affiliation_parts.append(f"\\textit{{{author.organization}}}")
-            if author.city or author.country:
-                location = ", ".join(filter(None, [author.city, author.country]))
-                affiliation_parts.append(location)
-            if author.email:
-                affiliation_parts.append(author.email)
-
-            if affiliation_parts:
-                author_block += "\n" + "\\IEEEauthorblockA{" + " \\\\\n".join(affiliation_parts) + "}"
-
-            author_blocks.append(author_block)
-
-        latex_content.append("\\author{" + "\n\\and\n".join(author_blocks) + "\n}")
-    else:
-        latex_content.extend([
-            r"\author{\IEEEauthorblockN{1\textsuperscript{st} Given Name Surname}",
-            r"\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\",
-            r"\textit{name of organization (of Aff.)}\\",
-            r"City, Country \\",
-            r"email address or ORCID}",
-            r"}",
-        ])
-
-    latex_content.extend([
-        "",
-        r"\maketitle",
-    ])
-
-    import re, json
-
-    sections = document.sections.all().order_by('order')
-
-    all_images = list(document.images.all().order_by('order', 'uploaded_at'))
-    section_images = {}
-    unassigned_images = []
-    for img in all_images:
-        if img.section_id:
-            section_images.setdefault(img.section_id, []).append(img)
-        else:
-            unassigned_images.append(img)
-
-    all_tables = list(document.tables.all().order_by('order', 'created_at'))
-    section_tables = {}
-    for t in all_tables:
-        if t.section_id:
-            section_tables.setdefault(t.section_id, []).append(t)
-
-    emitted_image_ids = set()
-
-    def emit_figure(img):
-        filename = img.filename.replace(" ", "_")
-        label = img.label or f'fig{img.id}'
-        caption = img.caption or ''
-        width = max(0.1, min(1.0, img.width or 0.9))
-        lines = [
-            r"\begin{figure}[htbp]",
-            r"\centering",
-            f"\\includegraphics[width={width:.2f}\\columnwidth]{{{filename}}}",
-        ]
-        if caption:
-            lines.append(f"\\caption{{{caption}}}")
-        lines.append(f"\\label{{{label}}}")
-        lines.append(r"\end{figure}")
-        lines.append("")
-        return lines
-
-    def emit_table(table):
-        label = table.label or f'tab{table.id}'
-        caption = table.caption or ''
-        try:
-            grid = json.loads(table.content)
-        except Exception:
-            grid = [["Column 1", "Column 2"], ["Data 1", "Data 2"]]
-
-        if not isinstance(grid, list) or not grid:
-            return []
-
-        cols_count = max(len(row) for row in grid) if grid else 0
-        if cols_count == 0:
-            return []
-
-        style = getattr(table, 'style', 'standard')
-
-        if style == 'booktabs' or style == 'no_vertical' or style == 'minimal':
-            col_format = "c" * cols_count
-        else:
-            col_format = "|" + "c|" * cols_count
-
-        lines = [
-            r"\begin{table}[htbp]",
-            r"\centering",
-            f"\\caption{{{caption}}}" if caption else "",
-            f"\\label{{{label}}}",
-            f"\\begin{{tabular}}{{{col_format}}}",
-        ]
-
-        if style == 'booktabs' or style == 'minimal':
-            lines.append(r"\toprule")
-        else:
-            lines.append(r"\hline")
-
-        for i, row in enumerate(grid):
-            cells = [str(cell) for cell in row] + [""] * (cols_count - len(row))
-            clean_cells = []
-            for cell in cells:
-                c = cell.replace('&', r'\&').replace('%', r'\%').replace('$', r'\$').replace('_', r'\_').replace('#', r'\#')
-                clean_cells.append(c)
-
-            row_str = " & ".join(clean_cells) + r" \\"
-
-            if i == 0:
-                if style == 'booktabs':
-                    row_str += r" \midrule"
-                elif style == 'minimal':
-                    pass
-                else:
-                    row_str += r" \hline"
-            else:
-                if i == len(grid) - 1:
-                    if style == 'booktabs' or style == 'minimal':
-                        row_str += r" \bottomrule"
-                    else:
-                        row_str += r" \hline"
-                else:
-                    if style == 'standard':
-                        row_str += r" \hline"
-
-            lines.append(row_str)
-
-        lines.extend([
-            r"\end{tabular}",
-            r"\end{table}",
-            ""
-        ])
-        return lines
-
-    def process_content_html(content):
-        if not content:
-            return ""
-
-        import html as html_module
-
-        equations = []
-        def unescape_latex(match):
-            eq_type = match.group(1)
-            latex = html_module.unescape(match.group(2))
-            if eq_type == 'block':
-                eq_str = f'$${latex}$$'
-            else:
-                eq_str = f'${latex}$'
-            equations.append(eq_str)
-            return f'__EQ_{len(equations)-1}__'
-
-        text = re.sub(r'<span[^>]*class="eq-chip"[^>]*data-type="(inline|block)"[^>]*data-latex="([^"]+)"[^>]*>.*?</span>', unescape_latex, content)
-
-        refs = []
-        def process_ref_cite(match):
-            ref_type = match.group(1)
-            label = match.group(2)
-            out = f'\\{ref_type}{{{label}}}'
-            if ref_type == 'ref':
-                img = next((i for i in all_images if i.label == label), None)
-                if img and img.id not in emitted_image_ids:
-                    emitted_image_ids.add(img.id)
-                    out += '\n\n' + '\n'.join(emit_figure(img)) + '\n\n'
-            refs.append(out)
-            return f'__REF_{len(refs)-1}__'
-
-        text = re.sub(r'<span[^>]*data-type="(ref|cite)"[^>]*data-label="([^"]+)"[^>]*>.*?</span>', process_ref_cite, text)
-
-        def process_raw_ref(match):
-            label = match.group(1)
-            out = f'\\ref{{{label}}}'
-            img = next((i for i in all_images if i.label == label), None)
-            if img and img.id not in emitted_image_ids:
-                emitted_image_ids.add(img.id)
-                out += '\n\n' + '\n'.join(emit_figure(img)) + '\n\n'
-            refs.append(out)
-            return f'__REF_{len(refs)-1}__'
-
-        text = re.sub(r'\\ref{([^}]+)}', process_raw_ref, text)
-
-        text = re.sub(r'<p>(.*?)</p>', r'\1\n\n', text, flags=re.DOTALL)
-        text = re.sub(r'<h3>(.*?)</h3>', r'\1\n\n', text, flags=re.DOTALL)
-        text = re.sub(r'<h4>(.*?)</h4>', r'\1\n\n', text, flags=re.DOTALL)
-        text = re.sub(r'<strong>(.*?)</strong>', r'\\textbf{\1}', text, flags=re.DOTALL)
-        text = re.sub(r'<em>(.*?)</em>', r'\\textit{\1}', text, flags=re.DOTALL)
-
-        text = re.sub(r'<[^>]+>', '', text)
-        text = html_module.unescape(text)
-
-        text = text.replace('%', '\\%').replace('&', '\\&').replace('#', '\\#')
-
-        for i, ref_str in enumerate(refs):
-            text = text.replace(f'__REF_{i}__', ref_str)
-
-        for i, eq_str in enumerate(equations):
-            text = text.replace(f'__EQ_{i}__', eq_str)
-
-        return text.strip() + '\n\n'
-
-    def emit_section(section, depth=1):
-        lines = []
-        processed_content = process_content_html(section.content)
-
-        if section.section_type == 'abstract':
-            lines.append(r"\begin{abstract}")
-            lines.append(processed_content)
-            lines.append(r"\end{abstract}")
-            if document.index_terms:
-                lines.append(r"\begin{IEEEkeywords}")
-                lines.append(document.index_terms)
-                lines.append(r"\end{IEEEkeywords}")
-        elif section.section_type == 'references':
-            if not document.references.exists():
-                lines.append(r"\section{References}")
-                lines.append(processed_content)
-        else:
-            if depth == 1:
-                cmd = "section"
-            elif depth == 2:
-                cmd = "subsection"
-            else:
-                cmd = "subsubsection"
-
-            lines.append(f"\\{cmd}{{{section.title}}}")
-            if processed_content:
-                lines.append(processed_content)
-
-        for img in section_images.get(section.id, []):
-            if img.id not in emitted_image_ids:
-                emitted_image_ids.add(img.id)
-                lines.extend(emit_figure(img))
-
-        for t in section_tables.get(section.id, []):
-            lines.extend(emit_table(t))
-
-        subsections = section.subsections.all().order_by('order')
-        for sub in subsections:
-            lines.extend(emit_section(sub, depth + 1))
-
-        return lines
-
-    top_sections = document.sections.filter(parent=None).order_by('order')
-
-    for section in top_sections:
-        latex_content.extend(emit_section(section, depth=1))
-
-    if document.references.exists():
-        latex_content.append(r"\bibliographystyle{IEEEtran}")
-        latex_content.append(r"\bibliography{refs}")
-
-    latex_content.append(r"\end{document}")
-    return "\n".join(latex_content)
 
 
 @api_view(['GET'])
@@ -869,7 +657,7 @@ def get_latex_source(request, doc_id):
     """Return the LaTeX source code for live preview"""
     try:
         document = Document.objects.get(id=doc_id)
-        if document.user and document.user != request.user and not document.collaborators.filter(id=request.user.id).exists():
+        if not can_view_document(document, request.user):
             return Response({'error': 'Not found'}, status=404)
         latex_source = generate_latex_source(document)
         return Response({'latex': latex_source})
@@ -877,7 +665,7 @@ def get_latex_source(request, doc_id):
         return Response({'error': 'Document not found'}, status=404)
 
 
-def compile_pdf_online(latex_source, document, cls_source):
+def compile_pdf_online(latex_source, document, template):
     import requests
     import base64
 
@@ -899,16 +687,30 @@ def compile_pdf_online(latex_source, document, cls_source):
             "content": bib_content
         })
 
-    if _os.path.exists(cls_source):
+    if template.class_file and template.class_file_path and _os.path.exists(template.class_file_path):
         try:
-            with open(cls_source, 'r', encoding='utf-8', errors='replace') as f:
+            with open(template.class_file_path, 'r', encoding='utf-8', errors='replace') as f:
                 cls_content = f.read()
             resources.append({
-                "path": "IEEEtran.cls",
+                "path": template.class_file,
                 "content": cls_content
             })
         except Exception as e:
-            print("Error reading IEEEtran.cls for online compile:", e)
+            print(f"Error reading {template.class_file} for online compile:", e)
+
+    if template.bib_style:
+        bst_filename = f"{template.bib_style}.bst"
+        bst_path = _os.path.join(_os.path.dirname(template.class_file_path) if template.class_file_path else _os.path.join(settings.BASE_DIR, 'api', 'templates', 'classfiles'), bst_filename)
+        if _os.path.exists(bst_path):
+            try:
+                with open(bst_path, 'r', encoding='utf-8', errors='replace') as f:
+                    bst_content = f.read()
+                resources.append({
+                    "path": bst_filename,
+                    "content": bst_content
+                })
+            except Exception as e:
+                print(f"Error reading {bst_filename} for online compile:", e)
 
     for img in document.images.all():
         if img.image_base64:
@@ -949,7 +751,7 @@ def _compile_pdf_to_bytes(latex_source, document):
     import base64
     import copy
 
-    cls_source = _os.path.join(settings.BASE_DIR.parent, 'ieee_format', 'IEEEtran.cls')
+    template = TemplateRegistry.get(document.template)
 
     try:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -964,8 +766,14 @@ def _compile_pdf_to_bytes(latex_source, document):
                     for ref in refs:
                         f.write(ref.bibtex + "\n\n")
 
-            if _os.path.exists(cls_source):
-                shutil.copy(cls_source, _os.path.join(tmpdir, 'IEEEtran.cls'))
+            if template.class_file and template.class_file_path and _os.path.exists(template.class_file_path):
+                shutil.copy(template.class_file_path, _os.path.join(tmpdir, template.class_file))
+
+            if template.bib_style:
+                bst_filename = f"{template.bib_style}.bst"
+                bst_path = _os.path.join(_os.path.dirname(template.class_file_path) if template.class_file_path else _os.path.join(settings.BASE_DIR, 'api', 'templates', 'classfiles'), bst_filename)
+                if _os.path.exists(bst_path):
+                    shutil.copy(bst_path, _os.path.join(tmpdir, bst_filename))
 
             for img in document.images.all():
                 if img.image_base64:
@@ -1026,13 +834,13 @@ def _compile_pdf_to_bytes(latex_source, document):
 
     except (FileNotFoundError, OSError):
         print("Local compiler not found, attempting online compilation fallback...")
-        pdf_content = compile_pdf_online(latex_source, document, cls_source)
+        pdf_content = compile_pdf_online(latex_source, document, template)
         if pdf_content:
             return pdf_content, None, 200
         return None, {'error': 'LaTeX compilation failed', 'message': 'Local compiler not found and online fallback compilation failed.'}, 503
     except subprocess.TimeoutExpired:
         print("Local compiler timed out, attempting online compilation fallback...")
-        pdf_content = compile_pdf_online(latex_source, document, cls_source)
+        pdf_content = compile_pdf_online(latex_source, document, template)
         if pdf_content:
             return pdf_content, None, 200
         return None, {'error': 'Compilation timeout'}, 500
@@ -1050,7 +858,7 @@ def export_pdf(request, doc_id):
             credit.save()
 
         document = Document.objects.get(id=doc_id)
-        if document.user and document.user != request.user and not document.collaborators.filter(id=request.user.id).exists():
+        if not can_view_document(document, request.user):
             return Response({'error': 'Not found'}, status=404)
         latex_source = generate_latex_source(document)
 
@@ -1077,7 +885,7 @@ def preview_pdf(request, doc_id):
     """Compile LaTeX to PDF and return it for live preview without deducting credits"""
     try:
         document = Document.objects.get(id=doc_id)
-        if document.user and document.user != request.user and not document.collaborators.filter(id=request.user.id).exists():
+        if not can_view_document(document, request.user):
             return Response({'error': 'Not found'}, status=404)
         latex_source = generate_latex_source(document)
 
@@ -1108,9 +916,11 @@ def export_latex(request, doc_id):
             credit.save()
 
         document = Document.objects.get(id=doc_id)
-        if document.user and document.user != request.user and not document.collaborators.filter(id=request.user.id).exists():
+        if not can_view_document(document, request.user):
             return Response({'error': 'Not found'}, status=404)
         latex_source = generate_latex_source(document)
+
+        template = TemplateRegistry.get(document.template)
 
         zip_buffer = io.BytesIO()
         with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
@@ -1121,9 +931,14 @@ def export_latex(request, doc_id):
                 bib_content = "\n\n".join([ref.bibtex for ref in refs])
                 zip_file.writestr("refs.bib", bib_content)
 
-            cls_path = _os.path.join(settings.BASE_DIR.parent, 'ieee_format', 'IEEEtran.cls')
-            if _os.path.exists(cls_path):
-                zip_file.write(cls_path, 'IEEEtran.cls')
+            if template.class_file and template.class_file_path and _os.path.exists(template.class_file_path):
+                zip_file.write(template.class_file_path, template.class_file)
+
+            if template.bib_style:
+                bst_filename = f"{template.bib_style}.bst"
+                bst_path = _os.path.join(_os.path.dirname(template.class_file_path) if template.class_file_path else _os.path.join(settings.BASE_DIR, 'api', 'templates', 'classfiles'), bst_filename)
+                if _os.path.exists(bst_path):
+                    zip_file.write(bst_path, bst_filename)
 
             for img in document.images.all():
                 if img.image_base64:
@@ -1160,7 +975,12 @@ class PaperTableViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         from django.db.models import Q
-        user_docs = Document.objects.filter(Q(user=self.request.user) | Q(collaborators=self.request.user)).distinct()
+        user_docs = Document.objects.filter(
+            Q(user=self.request.user) | 
+            Q(collaborators=self.request.user) |
+            Q(commenters=self.request.user) |
+            Q(viewers=self.request.user)
+        ).distinct()
         qs = super().get_queryset().filter(document__in=user_docs)
         doc_id = self.request.query_params.get('document')
         if doc_id:
@@ -1181,7 +1001,12 @@ class CommentViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         from django.db.models import Q
-        user_docs = Document.objects.filter(Q(user=self.request.user) | Q(collaborators=self.request.user)).distinct()
+        user_docs = Document.objects.filter(
+            Q(user=self.request.user) | 
+            Q(collaborators=self.request.user) |
+            Q(commenters=self.request.user) |
+            Q(viewers=self.request.user)
+        ).distinct()
         qs = super().get_queryset().filter(document__in=user_docs)
         doc_id = self.request.query_params.get('document')
         if doc_id:
@@ -1190,7 +1015,7 @@ class CommentViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         doc = serializer.validated_data.get('document')
-        if doc.user != self.request.user and not doc.collaborators.filter(id=self.request.user.id).exists():
+        if doc.user != self.request.user and not doc.collaborators.filter(id=self.request.user.id).exists() and not doc.commenters.filter(id=self.request.user.id).exists():
             raise PermissionError("Cannot add comments to this document")
         text = serializer.validated_data.get('text', '')
         if len(text) > 5000:
@@ -1470,3 +1295,24 @@ def contact_inquiry(request):
         name=name, email=email, institution=institution, message=message
     )
     return Response({'success': True})
+
+@api_view(['POST'])
+def change_template(request, doc_id):
+    """Change document template and/or style"""
+    try:
+        document = Document.objects.get(id=doc_id)
+        if not can_view_document(document, request.user):
+            return Response({'error': 'Not found'}, status=404)
+            
+        template_id = request.data.get('template')
+        style_id = request.data.get('template_style')
+        
+        if template_id:
+            document.template = template_id
+        if style_id:
+            document.template_style = style_id
+            
+        document.save()
+        return Response(DocumentSerializer(document).data)
+    except Document.DoesNotExist:
+        return Response({'error': 'Document not found'}, status=404)

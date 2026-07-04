@@ -168,6 +168,8 @@ class PaperImageSerializer(serializers.ModelSerializer):
 class DocumentSerializer(serializers.ModelSerializer):
     user = UserSerializer(read_only=True)
     collaborators = UserSerializer(many=True, read_only=True)
+    commenters = UserSerializer(many=True, read_only=True)
+    viewers = UserSerializer(many=True, read_only=True)
     sections = serializers.SerializerMethodField()
     authors = AuthorSerializer(many=True, read_only=True)
     images = PaperImageSerializer(many=True, read_only=True)
@@ -177,7 +179,7 @@ class DocumentSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Document
-        fields = ['id', 'user', 'collaborators', 'title', 'index_terms', 'created_at', 'updated_at', 'sections', 'authors', 'images', 'references', 'tables', 'comments']
+        fields = ['id', 'user', 'collaborators', 'commenters', 'viewers', 'title', 'index_terms', 'template', 'template_style', 'created_at', 'updated_at', 'sections', 'authors', 'images', 'references', 'tables', 'comments']
         read_only_fields = ['created_at', 'updated_at']
         extra_kwargs = {
             'title': {'max_length': 200},

@@ -278,6 +278,98 @@ let currentAIProposal = null;
 // Track the last focused editor for toolbar commands
 let lastFocusedEditorId = null;
 
+// Template Logic
+const templateStyles = {
+    'ieee': [
+        {value: 'conference', label: 'Conference'},
+        {value: 'journal', label: 'Journal'},
+        {value: 'compsoc-conf', label: 'Computer Society Conference'},
+        {value: 'compsoc-journal', label: 'Computer Society Journal'},
+        {value: 'comsoc-conf', label: 'Communications Society Conference'},
+        {value: 'comsoc-journal', label: 'Communications Society Journal'},
+        {value: 'technote', label: 'Technote / Correspondence'}
+    ],
+    'acm': [
+        {value: 'sigconf', label: 'Conference (SIGCONF)'},
+        {value: 'acmsmall', label: 'Journal (ACM Small)'},
+        {value: 'acmlarge', label: 'Journal (ACM Large)'},
+        {value: 'acmtog', label: 'Journal (ACM TOG)'},
+        {value: 'sigplan', label: 'Conference (SIGPLAN)'}
+    ],
+    'elsevier': [
+        {value: 'preprint', label: 'Preprint (Submission)'},
+        {value: 'review', label: 'Review (Double-spaced)'},
+        {value: '1p', label: 'Final — Single Column'},
+        {value: '3p', label: 'Final — Two Column'},
+        {value: '5p', label: 'Final — Two Column'}
+    ],
+    'springer-lncs': [
+        {value: 'runningheads', label: 'Standard'}
+    ],
+    'apa': [
+        {value: 'stu', label: 'Student Paper'},
+        {value: 'man', label: 'Professional Manuscript'},
+        {value: 'jou', label: 'Journal Format'},
+        {value: 'doc', label: 'APA 6th Compatibility'}
+    ],
+    'mla': [
+        {value: 'student', label: 'Student Paper'},
+        {value: 'professional', label: 'Professional Submission'}
+    ]
+};
+
+window.updateTemplateOptions = function(selectedStyle = null) {
+    const templateSelect = document.getElementById('doc-template-select');
+    const styleSelect = document.getElementById('doc-template-style-select');
+    if (!templateSelect || !styleSelect) return;
+    
+    const template = templateSelect.value;
+    styleSelect.innerHTML = '';
+    const styles = templateStyles[template] || templateStyles['ieee'];
+    
+    styles.forEach(style => {
+        const option = document.createElement('option');
+        option.value = style.value;
+        option.textContent = style.label;
+        styleSelect.appendChild(option);
+    });
+    
+    if (selectedStyle && styles.some(s => s.value === selectedStyle)) {
+        styleSelect.value = selectedStyle;
+    } else {
+        styleSelect.value = styles[0].value;
+    }
+    
+    // Only trigger save if not called during initialization
+    if (typeof selectedStyle !== 'string' && currentDocId) {
+        window.saveDocumentTemplate();
+    }
+};
+
+window.saveDocumentTemplate = async function() {
+    if (!currentDocId) return;
+    const template = document.getElementById('doc-template-select').value;
+    const style = document.getElementById('doc-template-style-select').value;
+    
+    try {
+        const response = await fetch(`/api/documents/${currentDocId}/`, {
+            method: 'PATCH',
+            headers: { 
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken()
+            },
+            body: JSON.stringify({ template: template, template_style: style })
+        });
+        
+        if (!response.ok) throw new Error('Failed to update template');
+        
+        updateSaveStatus('Autosaved', '#94a3b8');
+        updateLatexPreview();
+    } catch (e) {
+        console.error("Error saving template:", e);
+    }
+};
+
 async function initApp() {
     console.log("PaperWriter Frontend Initialized");
 
@@ -560,6 +652,61 @@ async function exportPdf(buttonId) {
 // ============================================================
 // DOCUMENT LOADING
 // ============================================================
+function applyRoleRestrictions() {
+    const role = window.currentUserRole || 'viewer';
+    
+    // Add badge
+    let badgeContainer = document.getElementById('role-badge-container');
+    if (!badgeContainer) {
+        badgeContainer = document.createElement('div');
+        badgeContainer.id = 'role-badge-container';
+        badgeContainer.style = 'margin-left: 12px; display: flex; align-items: center;';
+        
+        const header = document.querySelector('.editor-header .header-left');
+        if (header) {
+            header.appendChild(badgeContainer);
+        }
+    }
+    
+    if (role === 'viewer') {
+        badgeContainer.innerHTML = '<span style="background: var(--brand-100); color: var(--brand-700); padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">👀 Viewing</span>';
+    } else if (role === 'commenter') {
+        badgeContainer.innerHTML = '<span style="background: var(--brand-100); color: var(--brand-700); padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">💬 Commenting</span>';
+    } else {
+        badgeContainer.innerHTML = '';
+    }
+
+    const isReadOnly = (role === 'viewer' || role === 'commenter');
+    
+    // Disable title and index terms
+    const titleEl = document.getElementById('doc-title');
+    if (titleEl) titleEl.disabled = isReadOnly;
+    const indexTermsEl = document.getElementById('doc-index-terms');
+    if (indexTermsEl) indexTermsEl.disabled = isReadOnly;
+    
+    // Hide add section buttons
+    document.querySelectorAll('.add-section-btn').forEach(btn => btn.style.display = isReadOnly ? 'none' : '');
+    const addFirstSectionBtn = document.getElementById('add-first-section-btn');
+    if (addFirstSectionBtn) addFirstSectionBtn.style.display = isReadOnly ? 'none' : 'flex';
+    
+    // Hide formatting toolbar
+    const toolbar = document.querySelector('.formatting-toolbar');
+    if (toolbar) toolbar.style.display = isReadOnly ? 'none' : 'flex';
+
+    // Disable all editors
+    if (typeof editors !== 'undefined') {
+        Object.values(editors).forEach(editor => {
+            if (editor && typeof editor.disable === 'function') {
+                if (isReadOnly) editor.disable();
+                else editor.enable();
+            }
+        });
+    }
+
+    // Hide share button if not owner
+    const shareBtn = document.getElementById('share-doc-btn');
+    if (shareBtn) shareBtn.style.display = (role === 'owner') ? 'flex' : 'none';
+}
 
 async function loadDocument(id) {
     try {
@@ -576,6 +723,20 @@ async function loadDocument(id) {
         if (!response.ok) throw new Error("Document not found");
 
         const doc = await response.json();
+
+        window.currentUserRole = 'viewer';
+        if (doc.user && doc.user.email === window.currentUser.email) {
+            window.currentUserRole = 'owner';
+        } else if (doc.collaborators && doc.collaborators.some(c => c.email === window.currentUser.email)) {
+            window.currentUserRole = 'editor';
+        } else if (doc.commenters && doc.commenters.some(c => c.email === window.currentUser.email)) {
+            window.currentUserRole = 'commenter';
+        } else if (doc.viewers && doc.viewers.some(c => c.email === window.currentUser.email)) {
+            window.currentUserRole = 'viewer';
+        }
+        if (typeof applyRoleRestrictions === 'function') {
+            applyRoleRestrictions();
+        }
 
         // Update header title
         const titleEl = document.getElementById('doc-title');
@@ -602,6 +763,18 @@ async function loadDocument(id) {
             newIndexTermsEl.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter') newIndexTermsEl.blur();
             });
+        }
+
+        // Update document format
+        const templateSelect = document.getElementById('doc-template-select');
+        const styleSelect = document.getElementById('doc-template-style-select');
+        if (templateSelect && styleSelect) {
+            templateSelect.value = doc.template || 'ieee';
+            window.updateTemplateOptions(doc.template_style || 'conference');
+            
+            const isReadOnly = (window.currentUserRole === 'viewer' || window.currentUserRole === 'commenter');
+            templateSelect.disabled = isReadOnly;
+            styleSelect.disabled = isReadOnly;
         }
 
         const nav = document.getElementById('section-nav');
@@ -4314,12 +4487,14 @@ async function loadCollaborators() {
         
         collabs.forEach(collab => {
             const fullName = `${collab.first_name} ${collab.last_name}`.trim() || collab.username;
+            const displayRole = collab.role ? (collab.role.charAt(0).toUpperCase() + collab.role.slice(1)) : 'Editor';
             html += `
                 <div class="share-collab-item">
                     <div class="collab-info">
                         <span style="font-weight:600;">${escapeHtml(fullName)}</span>
                         <span class="collab-email">${escapeHtml(collab.email)}</span>
                     </div>
+                    <span style="font-size: 11px; color: var(--brand-500); margin-right: 12px; border: 1px solid var(--border-light); padding: 2px 6px; border-radius: 4px;">${escapeHtml(displayRole)}</span>
                     ${isOwner ? `<button class="btn-remove" onclick="removeCollaborator('${escapeHtml(collab.email)}')">Remove</button>` : ''}
                 </div>
             `;
@@ -4333,7 +4508,9 @@ async function loadCollaborators() {
 
 window.addCollaborator = async function() {
     const emailInput = document.getElementById('share-email-input');
+    const roleInput = document.getElementById('share-role-input');
     const email = emailInput.value.trim();
+    const role = roleInput ? roleInput.value : 'editor';
     const errorEl = document.getElementById('share-error');
     
     if (!email) return;
@@ -4346,7 +4523,7 @@ window.addCollaborator = async function() {
                 'Content-Type': 'application/json',
                 'X-CSRFToken': getCsrfToken()
             },
-            body: JSON.stringify({ email })
+            body: JSON.stringify({ email, role })
         });
         
         const data = await res.json();

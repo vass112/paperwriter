@@ -4,11 +4,63 @@ from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.utils import timezone
 
+TEMPLATE_CHOICES = [
+    ('ieee',          'IEEE'),
+    ('acm',           'ACM'),
+    ('elsevier',      'Elsevier'),
+    ('springer-lncs', 'Springer LNCS'),
+    ('apa',           'APA 7th Edition'),
+    ('mla',           'MLA 9th Edition'),
+]
+
+TEMPLATE_STYLES = {
+    'ieee': [
+        ('conference',      'Conference'),
+        ('journal',         'Journal'),
+        ('compsoc-conf',    'Computer Society Conference'),
+        ('compsoc-journal', 'Computer Society Journal'),
+        ('comsoc-conf',     'Communications Society Conference'),
+        ('comsoc-journal',  'Communications Society Journal'),
+        ('technote',        'Technote / Correspondence'),
+    ],
+    'acm': [
+        ('sigconf',   'Conference (SIGCONF)'),
+        ('acmsmall',  'Journal (ACM Small)'),
+        ('acmlarge',  'Journal (ACM Large)'),
+        ('acmtog',    'Journal (ACM TOG)'),
+        ('sigplan',   'Conference (SIGPLAN)'),
+    ],
+    'elsevier': [
+        ('preprint', 'Preprint (Submission)'),
+        ('review',   'Review (Double-spaced)'),
+        ('1p',       'Final — Single Column (Model 1+)'),
+        ('3p',       'Final — Two Column (Model 3+)'),
+        ('5p',       'Final — Two Column (Model 5+)'),
+    ],
+    'springer-lncs': [
+        ('runningheads', 'Standard'),
+    ],
+    'apa': [
+        ('stu', 'Student Paper'),
+        ('man', 'Professional Manuscript'),
+        ('jou', 'Journal Format'),
+        ('doc', 'APA 6th Compatibility'),
+    ],
+    'mla': [
+        ('student',     'Student Paper'),
+        ('professional', 'Professional Submission'),
+    ],
+}
+
 class Document(models.Model):
     user = models.ForeignKey(User, related_name='documents', on_delete=models.CASCADE, null=True, blank=True)
-    collaborators = models.ManyToManyField(User, related_name='shared_documents', blank=True)
+    collaborators = models.ManyToManyField(User, related_name='shared_documents', blank=True) # Full Editors
+    commenters = models.ManyToManyField(User, related_name='commentable_documents', blank=True)
+    viewers = models.ManyToManyField(User, related_name='viewable_documents', blank=True)
     title = models.CharField(max_length=200, default="Untitled Paper")
     index_terms = models.CharField(max_length=500, default="component, formatting, style, styling, insert", blank=True)
+    template = models.CharField(max_length=30, choices=TEMPLATE_CHOICES, default='ieee')
+    template_style = models.CharField(max_length=30, default='conference')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -19,6 +71,7 @@ class Document(models.Model):
 class DocumentInvite(models.Model):
     document = models.ForeignKey(Document, related_name='invites', on_delete=models.CASCADE)
     email = models.EmailField()
+    role = models.CharField(max_length=20, choices=[('viewer', 'Viewer'), ('commenter', 'Commenter'), ('editor', 'Editor')], default='editor')
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -237,7 +290,12 @@ def create_user_profile(sender, instance, created, **kwargs):
         # Process pending invites for this email
         invites = DocumentInvite.objects.filter(email__iexact=instance.email)
         for invite in invites:
-            invite.document.collaborators.add(instance)
+            if invite.role == 'viewer':
+                invite.document.viewers.add(instance)
+            elif invite.role == 'commenter':
+                invite.document.commenters.add(instance)
+            else:
+                invite.document.collaborators.add(instance)
         invites.delete()
         
         # Create Sample Document

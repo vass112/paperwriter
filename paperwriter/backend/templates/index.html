@@ -164,6 +164,23 @@
                     <input type="text" id="doc-index-terms" class="modal-input" style="font-size: 12px; padding: 6px 10px; width: 100%; border: 1px solid var(--border); border-radius: var(--radius-sm); outline: none; background: transparent; color: var(--brand-800); box-sizing: border-box;" placeholder="e.g. machine learning...">
                 </div>
 
+                <!-- Document Template -->
+                <div class="sidebar-metadata" style="padding: 12px 16px; border-bottom: 1px solid var(--border-light);">
+                    <div class="nav-section-label" style="margin-bottom: 6px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--brand-400);">Document Format</div>
+                    <select id="doc-template-select" class="modal-input" style="font-size: 12px; padding: 6px 10px; width: 100%; border: 1px solid var(--border); border-radius: var(--radius-sm); outline: none; background: transparent; color: var(--brand-800); box-sizing: border-box; margin-bottom: 8px;" onchange="window.updateTemplateOptions()">
+                        <option value="ieee">IEEE</option>
+                        <option value="acm">ACM</option>
+                        <option value="elsevier">Elsevier</option>
+                        <option value="springer-lncs">Springer LNCS</option>
+                        <option value="apa">APA 7th Edition</option>
+                        <option value="mla">MLA 9th Edition</option>
+                    </select>
+                    <select id="doc-template-style-select" class="modal-input" style="font-size: 12px; padding: 6px 10px; width: 100%; border: 1px solid var(--border); border-radius: var(--radius-sm); outline: none; background: transparent; color: var(--brand-800); box-sizing: border-box;" onchange="window.saveDocumentTemplate()">
+                        <!-- Options populated via JS -->
+                    </select>
+                </div>
+
+
                 <nav id="section-nav">
                     <!-- Sections populated by JS -->
                 </nav>
@@ -992,6 +1009,14 @@
                     <div class="modal-input-group" style="flex: 1; margin-bottom: 0;">
                         <label>Collaborator Email</label>
                         <input type="email" id="share-email-input" class="modal-input" placeholder="e.g. coauthor@university.edu" style="margin-bottom: 0; width: 100%; box-sizing: border-box;">
+                    </div>
+                    <div class="modal-input-group" style="width: 120px; margin-bottom: 0;">
+                        <label>Role</label>
+                        <select id="share-role-input" class="modal-input" style="margin-bottom: 0; width: 100%; box-sizing: border-box; padding: 0 8px;">
+                            <option value="editor">Editor</option>
+                            <option value="commenter">Commenter</option>
+                            <option value="viewer">Viewer</option>
+                        </select>
                     </div>
                     <button type="button" class="btn-primary" onclick="addCollaborator()" style="height: 36px; padding: 0 16px; width: auto; flex-shrink: 0;">Add</button>
                 </div>
