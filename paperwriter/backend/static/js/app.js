@@ -725,13 +725,13 @@ async function loadDocument(id) {
         const doc = await response.json();
 
         window.currentUserRole = 'viewer';
-        if (doc.user && doc.user.email === window.currentUser.email) {
+        if (userProfile && doc.user && doc.user.email === userProfile.email) {
             window.currentUserRole = 'owner';
-        } else if (doc.collaborators && doc.collaborators.some(c => c.email === window.currentUser.email)) {
+        } else if (userProfile && doc.collaborators && doc.collaborators.some(c => c.email === userProfile.email)) {
             window.currentUserRole = 'editor';
-        } else if (doc.commenters && doc.commenters.some(c => c.email === window.currentUser.email)) {
+        } else if (userProfile && doc.commenters && doc.commenters.some(c => c.email === userProfile.email)) {
             window.currentUserRole = 'commenter';
-        } else if (doc.viewers && doc.viewers.some(c => c.email === window.currentUser.email)) {
+        } else if (userProfile && doc.viewers && doc.viewers.some(c => c.email === userProfile.email)) {
             window.currentUserRole = 'viewer';
         }
         if (typeof applyRoleRestrictions === 'function') {
