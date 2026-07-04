@@ -340,6 +340,14 @@ window.updateTemplateOptions = function(selectedStyle = null) {
         styleSelect.value = styles[0].value;
     }
     
+    // Update top badge text
+    const badgeTextEl = document.getElementById('doc-format-badge-text');
+    if (badgeTextEl && templateSelect.selectedIndex >= 0 && styleSelect.selectedIndex >= 0) {
+        const tText = templateSelect.options[templateSelect.selectedIndex].text;
+        const sText = styleSelect.options[styleSelect.selectedIndex].text;
+        badgeTextEl.textContent = `${tText} (${sText})`;
+    }
+
     // Only trigger save if not called during initialization
     if (typeof selectedStyle !== 'string' && currentDocId) {
         window.saveDocumentTemplate();
@@ -348,8 +356,18 @@ window.updateTemplateOptions = function(selectedStyle = null) {
 
 window.saveDocumentTemplate = async function() {
     if (!currentDocId) return;
-    const template = document.getElementById('doc-template-select').value;
-    const style = document.getElementById('doc-template-style-select').value;
+    const templateSelect = document.getElementById('doc-template-select');
+    const styleSelect = document.getElementById('doc-template-style-select');
+    const template = templateSelect.value;
+    const style = styleSelect.value;
+    
+    // Update top badge text
+    const badgeTextEl = document.getElementById('doc-format-badge-text');
+    if (badgeTextEl && templateSelect.selectedIndex >= 0 && styleSelect.selectedIndex >= 0) {
+        const tText = templateSelect.options[templateSelect.selectedIndex].text;
+        const sText = styleSelect.options[styleSelect.selectedIndex].text;
+        badgeTextEl.textContent = `${tText} (${sText})`;
+    }
     
     try {
         const response = await fetch(`/api/documents/${currentDocId}/`, {

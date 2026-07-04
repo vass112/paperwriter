@@ -129,6 +129,10 @@
                 <div class="header-divider" id="header-divider"></div>
                 <div class="header-doc-info" id="header-doc-info">
                     <input type="text" id="doc-title" class="header-doc-title" placeholder="Untitled Paper..." />
+                    <button class="doc-format-badge" id="doc-format-badge" onclick="openDocSettingsModal()" title="Document Settings">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                        <span id="doc-format-badge-text">IEEE (Conference)</span>
+                    </button>
                     <span class="header-autosave" id="save-status">
                         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"></path></svg>
                         Autosaved
@@ -136,6 +140,29 @@
                 </div>
             </div>
             <div class="header-right">
+                <style>
+                    .doc-format-badge {
+                        display: flex;
+                        align-items: center;
+                        gap: 6px;
+                        background: var(--surface);
+                        border: 1px solid var(--border);
+                        border-radius: var(--radius-sm);
+                        padding: 4px 10px;
+                        font-size: 11px;
+                        font-weight: 600;
+                        color: var(--brand-700);
+                        cursor: pointer;
+                        transition: all 0.2s ease;
+                        margin-left: 8px;
+                        height: 24px;
+                    }
+                    .doc-format-badge:hover {
+                        background: var(--brand-50);
+                        border-color: var(--brand-200);
+                        color: var(--brand-800);
+                    }
+                </style>
                 <div id="collab-avatars-group" class="collab-avatars-group" style="display: none; align-items: center; gap: 4px; margin-right: 12px;"></div>
                 <button id="share-doc-btn" class="btn-ghost" style="display: none; height: 32px; padding: 0 12px; font-size: 12px; font-weight: 600; margin-right: 12px; align-items: center; gap: 6px; border: 1px solid var(--border-light); background: transparent;" onclick="openShareModal()">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: block;"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8M16 6l-4-4-4 4M12 2v13"/></svg>
@@ -156,28 +183,6 @@
             <aside class="sidebar" id="sidebar">
                 <div class="sidebar-header">
                     <!-- toggle is in the header now -->
-                </div>
-
-                <!-- Metadata block for Keywords -->
-                <div class="sidebar-metadata" style="padding: 12px 16px; border-bottom: 1px solid var(--border-light);">
-                    <div class="nav-section-label" style="margin-bottom: 6px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--brand-400);">Index Terms</div>
-                    <input type="text" id="doc-index-terms" class="modal-input" style="font-size: 12px; padding: 6px 10px; width: 100%; border: 1px solid var(--border); border-radius: var(--radius-sm); outline: none; background: transparent; color: var(--brand-800); box-sizing: border-box;" placeholder="e.g. machine learning...">
-                </div>
-
-                <!-- Document Template -->
-                <div class="sidebar-metadata" style="padding: 12px 16px; border-bottom: 1px solid var(--border-light);">
-                    <div class="nav-section-label" style="margin-bottom: 6px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--brand-400);">Document Format</div>
-                    <select id="doc-template-select" class="modal-input" style="font-size: 12px; padding: 6px 10px; width: 100%; border: 1px solid var(--border); border-radius: var(--radius-sm); outline: none; background: transparent; color: var(--brand-800); box-sizing: border-box; margin-bottom: 8px;" onchange="window.updateTemplateOptions()">
-                        <option value="ieee">IEEE</option>
-                        <option value="acm">ACM</option>
-                        <option value="elsevier">Elsevier</option>
-                        <option value="springer-lncs">Springer LNCS</option>
-                        <option value="apa">APA 7th Edition</option>
-                        <option value="mla">MLA 9th Edition</option>
-                    </select>
-                    <select id="doc-template-style-select" class="modal-input" style="font-size: 12px; padding: 6px 10px; width: 100%; border: 1px solid var(--border); border-radius: var(--radius-sm); outline: none; background: transparent; color: var(--brand-800); box-sizing: border-box;" onchange="window.saveDocumentTemplate()">
-                        <!-- Options populated via JS -->
-                    </select>
                 </div>
 
 
@@ -1211,6 +1216,56 @@
         </footer>
     </div>
     {% endif %}
+
+    <!-- Document Settings Modal -->
+    <div id="doc-settings-modal" class="modal-overlay" style="display: none; z-index: 10000; align-items: center; justify-content: center;">
+        <div class="modal-content" style="max-width: 480px; width: 90%; padding: 24px; border-radius: var(--radius-lg); background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255,255,255,0.4); box-shadow: 0 20px 40px rgba(0,0,0,0.1);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+                <h3 style="margin: 0; font-family: 'Lora', serif; font-size: 20px; color: var(--brand-950);">Document Settings</h3>
+                <button onclick="closeDocSettingsModal()" class="btn-ghost" style="padding: 4px; border: none; background: transparent; cursor: pointer;">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+            </div>
+            
+            <div style="margin-bottom: 20px;">
+                <label style="display: block; font-size: 12px; font-weight: 600; color: var(--brand-700); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.05em;">LaTeX Template</label>
+                <select id="doc-template-select" class="modal-input" style="width: 100%; font-size: 14px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-md); outline: none; background: #ffffff; color: var(--brand-900); margin-bottom: 12px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);" onchange="window.updateTemplateOptions()">
+                    <option value="ieee">IEEE</option>
+                    <option value="acm">ACM</option>
+                    <option value="elsevier">Elsevier</option>
+                    <option value="springer-lncs">Springer LNCS</option>
+                    <option value="apa">APA 7th Edition</option>
+                    <option value="mla">MLA 9th Edition</option>
+                </select>
+            </div>
+
+            <div style="margin-bottom: 20px;">
+                <label style="display: block; font-size: 12px; font-weight: 600; color: var(--brand-700); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.05em;">Format Style</label>
+                <select id="doc-template-style-select" class="modal-input" style="width: 100%; font-size: 14px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-md); outline: none; background: #ffffff; color: var(--brand-900); box-shadow: 0 1px 2px rgba(0,0,0,0.05);" onchange="window.saveDocumentTemplate()">
+                    <!-- Options populated via JS -->
+                </select>
+            </div>
+
+            <div style="margin-bottom: 24px;">
+                <label style="display: block; font-size: 12px; font-weight: 600; color: var(--brand-700); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.05em;">Index Terms / Keywords</label>
+                <input type="text" id="doc-index-terms" class="modal-input" style="width: 100%; font-size: 14px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-md); outline: none; background: #ffffff; color: var(--brand-900); box-shadow: 0 1px 2px rgba(0,0,0,0.05);" placeholder="e.g. machine learning, data science">
+                <p style="font-size: 11px; color: var(--brand-500); margin-top: 6px;">Separate terms with commas. Will be injected into the abstract or keywords block depending on the template.</p>
+            </div>
+            
+            <div style="display: flex; justify-content: flex-end;">
+                <button onclick="closeDocSettingsModal()" class="btn-primary" style="padding: 10px 20px; font-size: 14px; border-radius: var(--radius-md);">Done</button>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        function openDocSettingsModal() {
+            document.getElementById('doc-settings-modal').style.display = 'flex';
+        }
+        function closeDocSettingsModal() {
+            document.getElementById('doc-settings-modal').style.display = 'none';
+        }
+    </script>
 
     <!-- ===== PRICING MODAL ===== -->
     <div id="pricing-modal" class="pricing-modal-overlay" style="display: none;">
