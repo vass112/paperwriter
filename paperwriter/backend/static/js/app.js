@@ -4583,15 +4583,21 @@ async function loadCollaborators() {
         if (listContainer) {
             listContainer.innerHTML = `
                 <div class="share-collab-item" style="pointer-events: none;">
-                    <div class="collab-info" style="width: 100%;">
+                    <div class="collab-info" style="flex: 1;">
                         <div class="skeleton skeleton-text" style="width: 60%; margin-bottom: 6px;"></div>
                         <div class="skeleton skeleton-text" style="width: 40%; margin-bottom: 0;"></div>
                     </div>
+                    <div style="display: flex; align-items: center; justify-content: flex-end; width: 60px;">
+                        <div class="skeleton" style="width: 100%; height: 20px; border-radius: 12px;"></div>
+                    </div>
                 </div>
                 <div class="share-collab-item" style="pointer-events: none;">
-                    <div class="collab-info" style="width: 100%;">
+                    <div class="collab-info" style="flex: 1;">
                         <div class="skeleton skeleton-text" style="width: 50%; margin-bottom: 6px;"></div>
                         <div class="skeleton skeleton-text" style="width: 30%; margin-bottom: 0;"></div>
+                    </div>
+                    <div style="display: flex; align-items: center; justify-content: flex-end; width: 60px;">
+                        <div class="skeleton" style="width: 100%; height: 20px; border-radius: 12px;"></div>
                     </div>
                 </div>
             `;
@@ -4627,21 +4633,26 @@ async function loadCollaborators() {
                     <span style="font-weight:600;">${escapeHtml(ownerName)}</span>
                     <span class="collab-email">${escapeHtml(ownerEmail)}</span>
                 </div>
-                <span class="owner-badge">Owner</span>
+                <div style="display: flex; align-items: center; gap: 8px; justify-content: flex-end;">
+                    <span class="ui-badge owner">Owner</span>
+                </div>
             </div>
         `;
         
         collabs.forEach(collab => {
             const fullName = `${collab.first_name} ${collab.last_name}`.trim() || collab.username;
             const displayRole = collab.role ? (collab.role.charAt(0).toUpperCase() + collab.role.slice(1)) : 'Editor';
+            const roleClass = collab.role ? collab.role.toLowerCase() : 'editor';
             html += `
                 <div class="share-collab-item">
                     <div class="collab-info">
                         <span style="font-weight:600;">${escapeHtml(fullName)}</span>
                         <span class="collab-email">${escapeHtml(collab.email)}</span>
                     </div>
-                    <span style="font-size: 11px; color: var(--brand-500); margin-right: 12px; border: 1px solid var(--border-light); padding: 2px 6px; border-radius: 4px;">${escapeHtml(displayRole)}</span>
-                    ${isOwner ? `<button class="btn-remove" onclick="removeCollaborator('${escapeHtml(collab.email)}')">Remove</button>` : ''}
+                    <div style="display: flex; align-items: center; gap: 8px; justify-content: flex-end;">
+                        <span class="ui-badge ${roleClass}">${escapeHtml(displayRole)}</span>
+                        ${isOwner ? `<button class="btn-remove" onclick="removeCollaborator('${escapeHtml(collab.email)}')">Remove</button>` : ''}
+                    </div>
                 </div>
             `;
         });

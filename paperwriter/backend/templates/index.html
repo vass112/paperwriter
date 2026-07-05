@@ -715,9 +715,9 @@
                                 <div class="doi-fetch-container" style="display: flex; gap: 8px; align-items: flex-end;">
                                     <div class="modal-input-group" style="flex: 1; margin-bottom: 0;">
                                         <label>Autofill by DOI</label>
-                                        <input type="text" id="ref-doi-input" class="modal-input" placeholder="e.g. 10.1109/CVPR.2016.90" style="margin-bottom: 0;">
+                                        <input type="text" id="ref-doi-input" class="modal-input" placeholder="e.g. 10.1109/CVPR.2016.90">
                                     </div>
-                                    <button type="button" id="ref-doi-fetch-btn" class="btn-primary sm" onclick="fetchDoiData()" style="height: 36px; padding: 0 16px; text-transform: none; font-size: 12px; font-weight: 500; letter-spacing: 0; width: auto; flex-shrink: 0;">Fetch Citation</button>
+                                    <button type="button" id="ref-doi-fetch-btn" class="btn-primary" onclick="fetchDoiData()" style="width: auto; flex-shrink: 0;">Fetch Citation</button>
                                 </div>
                             </div>
 
@@ -1010,20 +1010,20 @@
                 <div class="modal-info-box" style="margin-bottom: 16px; width: 100%; box-sizing: border-box;">
                     Share this document with other registered users by entering their email address.
                 </div>
-                <div style="display: flex; gap: 8px; width: 100%; align-items: flex-end; margin-bottom: 20px; box-sizing: border-box;">
+                <div style="display: flex; gap: 8px; width: 100%; align-items: flex-end; margin-bottom: 20px;">
                     <div class="modal-input-group" style="flex: 1; margin-bottom: 0;">
                         <label>Collaborator Email</label>
-                        <input type="email" id="share-email-input" class="modal-input" placeholder="e.g. coauthor@university.edu" style="margin-bottom: 0; width: 100%; box-sizing: border-box;">
+                        <input type="email" id="share-email-input" class="modal-input" placeholder="e.g. coauthor@university.edu">
                     </div>
                     <div class="modal-input-group" style="width: 120px; margin-bottom: 0;">
                         <label>Role</label>
-                        <select id="share-role-input" class="modal-select" style="margin-bottom: 0; width: 100%; box-sizing: border-box;">
+                        <select id="share-role-input" class="modal-select">
                             <option value="editor">Editor</option>
                             <option value="commenter">Commenter</option>
                             <option value="viewer">Viewer</option>
                         </select>
                     </div>
-                    <button type="button" class="btn-primary" onclick="addCollaborator()" style="height: 36px; padding: 0 16px; width: auto; flex-shrink: 0;">Add</button>
+                    <button type="button" class="btn-primary" onclick="addCollaborator()" style="width: auto; flex-shrink: 0;">Add</button>
                 </div>
                 <div id="share-error" class="modal-error" style="margin-bottom: 12px; display: none;"></div>
                 
