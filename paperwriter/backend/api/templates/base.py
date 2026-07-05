@@ -232,10 +232,7 @@ class BaseTemplate:
                     if content:
                         local_lines.append(content)
             else:
-                if section.section_type != 'custom' and hasattr(self, 'default_sections') and section.title not in [s[0] for s in self.default_sections]:
-                    local_lines.append(self.format_section_cmd(section.title, depth))
-                else:
-                    local_lines.append(self.format_section_cmd(section.title, depth))
+                local_lines.append(self.format_section_cmd(section.title, depth))
                     
                 if content:
                     local_lines.append(content)

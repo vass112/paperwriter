@@ -269,7 +269,14 @@ class DocumentViewSet(viewsets.ModelViewSet):
         
         email = request.data.get('email')
         role = request.data.get('role', 'editor')
+        allow_export = request.data.get('allow_export')
+        
+        if allow_export is not None:
+            document.allow_collaborators_to_export = (allow_export == True or str(allow_export).lower() == 'true')
+            document.save()
         if not email:
+            if allow_export is not None:
+                return Response({'message': 'Export settings updated.'}, status=status.HTTP_200_OK)
             return Response({'error': 'Email is required.'}, status=status.HTTP_400_BAD_REQUEST)
         if role not in ['viewer', 'commenter', 'editor']:
             return Response({'error': 'Invalid role.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -700,7 +707,8 @@ def compile_pdf_online(latex_source, document, template):
 
     if template.bib_style:
         bst_filename = f"{template.bib_style}.bst"
-        bst_path = _os.path.join(_os.path.dirname(template.class_file_path) if template.class_file_path else _os.path.join(settings.BASE_DIR, 'api', 'templates', 'classfiles'), bst_filename)
+        classfile_dir = _os.path.dirname(template.class_file_path) if template.class_file_path else _os.path.join(str(settings.BASE_DIR), 'api', 'templates', 'classfiles')
+        bst_path = _os.path.join(classfile_dir, bst_filename)
         if _os.path.exists(bst_path):
             try:
                 with open(bst_path, 'r', encoding='utf-8', errors='replace') as f:
@@ -771,7 +779,8 @@ def _compile_pdf_to_bytes(latex_source, document):
 
             if template.bib_style:
                 bst_filename = f"{template.bib_style}.bst"
-                bst_path = _os.path.join(_os.path.dirname(template.class_file_path) if template.class_file_path else _os.path.join(settings.BASE_DIR, 'api', 'templates', 'classfiles'), bst_filename)
+                classfile_dir = _os.path.dirname(template.class_file_path) if template.class_file_path else _os.path.join(str(settings.BASE_DIR), 'api', 'templates', 'classfiles')
+                bst_path = _os.path.join(classfile_dir, bst_filename)
                 if _os.path.exists(bst_path):
                     shutil.copy(bst_path, _os.path.join(tmpdir, bst_filename))
 
@@ -849,17 +858,24 @@ def _compile_pdf_to_bytes(latex_source, document):
 def export_pdf(request, doc_id):
     """Compile LaTeX to PDF and return it"""
     try:
-        with transaction.atomic():
-            credit, _ = DownloadCredit.objects.get_or_create(user=request.user)
-            credit = DownloadCredit.objects.select_for_update().get(id=credit.id)
-            if credit.remaining < 1:
-                return Response({"error": "No downloads remaining", "buy_url": "/api/payments/buy/"}, status=402)
-            credit.remaining -= 1
-            credit.save()
-
         document = Document.objects.get(id=doc_id)
         if not can_view_document(document, request.user):
             return Response({'error': 'Not found'}, status=404)
+
+        if document.user != request.user:
+            if not document.allow_collaborators_to_export:
+                return Response({'error': 'Only the document owner can export. Please ask the owner to export.'}, status=403)
+            paying_user = document.user
+        else:
+            paying_user = request.user
+
+        with transaction.atomic():
+            credit, _ = DownloadCredit.objects.get_or_create(user=paying_user)
+            credit = DownloadCredit.objects.select_for_update().get(id=credit.id)
+            if credit.remaining < 1:
+                return Response({"error": "No downloads remaining for the document owner" if paying_user != request.user else "No downloads remaining", "buy_url": "/api/payments/buy/"}, status=402)
+            credit.remaining -= 1
+            credit.save()
         latex_source = generate_latex_source(document)
 
         pdf_content, err_dict, status_code = _compile_pdf_to_bytes(latex_source, document)
@@ -871,7 +887,7 @@ def export_pdf(request, doc_id):
             return response
         else:
             with transaction.atomic():
-                credit = DownloadCredit.objects.select_for_update().get(user=request.user)
+                credit = DownloadCredit.objects.select_for_update().get(user=paying_user)
                 credit.remaining += 1
                 credit.save()
             return Response(err_dict, status=status_code)
@@ -907,17 +923,24 @@ def preview_pdf(request, doc_id):
 def export_latex(request, doc_id):
     """Export LaTeX project as ZIP"""
     try:
-        with transaction.atomic():
-            credit, _ = DownloadCredit.objects.get_or_create(user=request.user)
-            credit = DownloadCredit.objects.select_for_update().get(id=credit.id)
-            if credit.remaining < 1:
-                return Response({"error": "No downloads remaining", "buy_url": "/api/payments/buy/"}, status=402)
-            credit.remaining -= 1
-            credit.save()
-
         document = Document.objects.get(id=doc_id)
         if not can_view_document(document, request.user):
             return Response({'error': 'Not found'}, status=404)
+
+        if document.user != request.user:
+            if not document.allow_collaborators_to_export:
+                return Response({'error': 'Only the document owner can export. Please ask the owner to export.'}, status=403)
+            paying_user = document.user
+        else:
+            paying_user = request.user
+
+        with transaction.atomic():
+            credit, _ = DownloadCredit.objects.get_or_create(user=paying_user)
+            credit = DownloadCredit.objects.select_for_update().get(id=credit.id)
+            if credit.remaining < 1:
+                return Response({"error": "No downloads remaining for the document owner" if paying_user != request.user else "No downloads remaining", "buy_url": "/api/payments/buy/"}, status=402)
+            credit.remaining -= 1
+            credit.save()
         latex_source = generate_latex_source(document)
 
         template = TemplateRegistry.get(document.template)
@@ -936,7 +959,8 @@ def export_latex(request, doc_id):
 
             if template.bib_style:
                 bst_filename = f"{template.bib_style}.bst"
-                bst_path = _os.path.join(_os.path.dirname(template.class_file_path) if template.class_file_path else _os.path.join(settings.BASE_DIR, 'api', 'templates', 'classfiles'), bst_filename)
+                classfile_dir = _os.path.dirname(template.class_file_path) if template.class_file_path else _os.path.join(str(settings.BASE_DIR), 'api', 'templates', 'classfiles')
+                bst_path = _os.path.join(classfile_dir, bst_filename)
                 if _os.path.exists(bst_path):
                     zip_file.write(bst_path, bst_filename)
 
@@ -955,16 +979,13 @@ def export_latex(request, doc_id):
         return response
 
     except Document.DoesNotExist:
-        with transaction.atomic():
-            credit = DownloadCredit.objects.select_for_update().get(user=request.user)
-            credit.remaining += 1
-            credit.save()
         return Response({'error': 'Document not found'}, status=404)
     except Exception as e:
-        with transaction.atomic():
-            credit = DownloadCredit.objects.select_for_update().get(user=request.user)
-            credit.remaining += 1
-            credit.save()
+        if 'paying_user' in locals():
+            with transaction.atomic():
+                credit = DownloadCredit.objects.select_for_update().get(user=paying_user)
+                credit.remaining += 1
+                credit.save()
         return Response({'error': str(e)}, status=500)
 
 
@@ -1200,6 +1221,21 @@ def payment_callback(request):
     if not hmac.compare_digest(generated_signature, signature):
         return redirect('/?payment=failed')
 
+    amount_inr = 14900
+    credits_granted = 3
+    try:
+        rzp_resp = requests.get(
+            f"https://api.razorpay.com/v1/payments/{payment_id}",
+            auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET),
+            timeout=10
+        )
+        if rzp_resp.status_code == 200:
+            payment_data = rzp_resp.json()
+            amount_inr = payment_data.get('amount', 14900)
+            credits_granted = max(1, int((amount_inr / 14900) * 3))
+    except Exception as e:
+        print(f"Failed to fetch Razorpay payment details: {e}")
+
     user = User.objects.filter(email=user_email).first()
     if not user:
         # Create record for unknown user
@@ -1207,8 +1243,8 @@ def payment_callback(request):
             razorpay_payment_id=payment_id,
             razorpay_order_id=order_id,
             razorpay_signature=signature,
-            amount_inr=14900,
-            credits_granted=3,
+            amount_inr=amount_inr,
+            credits_granted=credits_granted,
             status='failed',
             user_email=user_email
         )
@@ -1225,16 +1261,16 @@ def payment_callback(request):
                 razorpay_payment_id=payment_id,
                 razorpay_order_id=order_id,
                 razorpay_signature=signature,
-                amount_inr=14900,
-                credits_granted=3,
+                amount_inr=amount_inr,
+                credits_granted=credits_granted,
                 status='completed',
                 user_email=user_email
             )
             
             credit, _ = DownloadCredit.objects.get_or_create(user=user)
             credit = DownloadCredit.objects.select_for_update().get(id=credit.id)
-            credit.remaining += 3
-            credit.total_purchased += 3
+            credit.remaining += credits_granted
+            credit.total_purchased += credits_granted
             credit.save()
             
         return redirect('/?payment=success')

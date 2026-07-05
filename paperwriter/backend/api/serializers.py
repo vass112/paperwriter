@@ -179,7 +179,7 @@ class DocumentSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Document
-        fields = ['id', 'user', 'collaborators', 'commenters', 'viewers', 'title', 'index_terms', 'template', 'template_style', 'created_at', 'updated_at', 'sections', 'authors', 'images', 'references', 'tables', 'comments']
+        fields = ['id', 'user', 'collaborators', 'commenters', 'viewers', 'title', 'index_terms', 'template', 'template_style', 'allow_collaborators_to_export', 'created_at', 'updated_at', 'sections', 'authors', 'images', 'references', 'tables', 'comments']
         read_only_fields = ['created_at', 'updated_at']
         extra_kwargs = {
             'title': {'max_length': 200},

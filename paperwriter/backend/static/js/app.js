@@ -1,5 +1,5 @@
-import { Editor, Node, mergeAttributes, InputRule } from 'https://esm.sh/@tiptap/core@2.11.5';
-import StarterKit from 'https://esm.sh/@tiptap/starter-kit@2.11.5';
+import { Editor, Node, mergeAttributes, InputRule } from '/static/js/vendor/tiptap-core.js';
+import StarterKit from '/static/js/vendor/tiptap-starter-kit.js';
 
 const LatexRefNode = Node.create({
   name: 'latexRef',
@@ -1374,9 +1374,9 @@ function renderLatexAsHTML(latexSource) {
         <html>
         <head>
             <meta charset="UTF-8">
-            <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
-            <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
-            <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+            <link rel="stylesheet" href="/static/js/vendor/katex.min.css">
+            <script src="/static/js/vendor/katex.min.js"></script>
+            <script src="/static/js/vendor/auto-render.min.js"></script>
             <style>
                 @page {
                     size: 8.5in 11in;
@@ -4508,7 +4508,30 @@ window.openShareModal = async function() {
     modal.style.pointerEvents = 'auto';
     document.getElementById('share-email-input').value = '';
     document.getElementById('share-error').style.display = 'none';
+
     await loadCollaborators();
+};
+
+window.updateAllowExport = async function() {
+    if (!currentDocId) return;
+    const isChecked = document.getElementById('share-allow-export').checked;
+    try {
+        const res = await fetch(`/api/documents/${currentDocId}/share/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken()
+            },
+            body: JSON.stringify({ allow_export: isChecked })
+        });
+        if (!res.ok) {
+            console.error('Failed to update export settings');
+            document.getElementById('share-allow-export').checked = !isChecked;
+        }
+    } catch (e) {
+        console.error(e);
+        document.getElementById('share-allow-export').checked = !isChecked;
+    }
 };
 
 window.closeShareModal = function() {
@@ -4526,6 +4549,17 @@ async function loadCollaborators() {
         const docRes = await fetch(`/api/documents/${currentDocId}/`);
         const doc = await docRes.json();
         const isOwner = doc.user && userProfile && doc.user.id === userProfile.id;
+        
+        const exportCheck = document.getElementById('share-allow-export');
+        if (exportCheck) {
+            exportCheck.checked = !!doc.allow_collaborators_to_export;
+            exportCheck.disabled = !isOwner;
+        }
+        
+        const toggleDiv = document.querySelector('#share-modal .dpdp-section');
+        if (toggleDiv) {
+            toggleDiv.style.display = isOwner ? 'block' : 'none';
+        }
         
         const collabRes = await fetch(`/api/documents/${currentDocId}/collaborators/`);
         const collabs = await collabRes.json();

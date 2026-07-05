@@ -57,6 +57,7 @@ class Document(models.Model):
     collaborators = models.ManyToManyField(User, related_name='shared_documents', blank=True) # Full Editors
     commenters = models.ManyToManyField(User, related_name='commentable_documents', blank=True)
     viewers = models.ManyToManyField(User, related_name='viewable_documents', blank=True)
+    allow_collaborators_to_export = models.BooleanField(default=False)
     title = models.CharField(max_length=200, default="Untitled Paper")
     index_terms = models.CharField(max_length=500, default="component, formatting, style, styling, insert", blank=True)
     template = models.CharField(max_length=30, choices=TEMPLATE_CHOICES, default='ieee')

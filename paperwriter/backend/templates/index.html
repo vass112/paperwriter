@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PaperWriter — Scholarly Workspace</title>
-    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <script src="https://accounts.google.com/gsi/client" async defer onerror="document.body.innerHTML='<div style=\'padding: 20px; font-family: sans-serif; text-align: center;\'><h2 style=\'color:#ef4444;\'>Login temporarily unavailable</h2><p>Could not load Google Identity Services.</p></div>'"></script>
     <script>
         window.GOOGLE_CLIENT_ID = "{{ google_client_id|escapejs }}";
         window.handleCredentialResponse = function(response) {
@@ -16,6 +16,7 @@
             }
         };
         window.addEventListener('error', function(e) {
+            if (!e.message) return; // Ignore resource loading errors (e.g. missing images)
             console.error("GLOBAL ERROR DETECTED:", e.message, "at", e.filename, ":", e.lineno, e.error);
             var errDiv = document.createElement('div');
             errDiv.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#ef4444;color:white;padding:12px;z-index:99999;font-family:monospace;font-size:12px;text-align:center;box-shadow:0 2px 10px rgba(0,0,0,0.2);';
@@ -35,7 +36,6 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/latex.js/dist/latex.min.js"></script>
     <style>
         .ProseMirror {
             outline: none;
@@ -1026,6 +1026,17 @@
                     <button type="button" class="btn-primary" onclick="addCollaborator()" style="height: 36px; padding: 0 16px; width: auto; flex-shrink: 0;">Add</button>
                 </div>
                 <div id="share-error" class="modal-error" style="margin-bottom: 12px; display: none;"></div>
+                
+                <div class="dpdp-section" style="width: 100%; margin-bottom: 20px;">
+                    <label class="custom-checkbox-wrapper">
+                        <input type="checkbox" id="share-allow-export" onchange="updateAllowExport()">
+                        <span class="custom-checkbox"></span>
+                        <div>
+                            <span class="checkbox-title">Allow collaborators to export</span>
+                            <span class="checkbox-desc">Warning: Exports by collaborators will deduct 1 credit from your balance per export.</span>
+                        </div>
+                    </label>
+                </div>
                 
                 <h4 style="font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--brand-500); margin-bottom: 12px;">Active Collaborators</h4>
                 <div id="share-collabs-list" style="display: flex; flex-direction: column; gap: 8px; width: 100%; max-height: 180px; overflow-y: auto;">
