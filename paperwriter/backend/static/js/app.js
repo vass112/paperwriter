@@ -3979,6 +3979,39 @@ window.loadDashboard = async function() {
     }
     
     try {
+        const grid = document.getElementById('dashboard-grid');
+        if (grid) {
+            grid.innerHTML = `
+                <div class="document-card" style="pointer-events: none;">
+                    <div>
+                        <div class="skeleton skeleton-text title"></div>
+                        <div class="skeleton skeleton-text short"></div>
+                    </div>
+                    <div class="doc-card-footer" style="border-top: none;">
+                        <div class="skeleton skeleton-text" style="width: 40%; margin-bottom: 0;"></div>
+                    </div>
+                </div>
+                <div class="document-card" style="pointer-events: none;">
+                    <div>
+                        <div class="skeleton skeleton-text title"></div>
+                        <div class="skeleton skeleton-text short"></div>
+                    </div>
+                    <div class="doc-card-footer" style="border-top: none;">
+                        <div class="skeleton skeleton-text" style="width: 40%; margin-bottom: 0;"></div>
+                    </div>
+                </div>
+                <div class="document-card" style="pointer-events: none;">
+                    <div>
+                        <div class="skeleton skeleton-text title"></div>
+                        <div class="skeleton skeleton-text short"></div>
+                    </div>
+                    <div class="doc-card-footer" style="border-top: none;">
+                        <div class="skeleton skeleton-text" style="width: 40%; margin-bottom: 0;"></div>
+                    </div>
+                </div>
+            `;
+        }
+        
         const response = await fetch('/api/documents/');
         const docs = await response.json();
         
@@ -4546,6 +4579,24 @@ window.closeShareModal = function() {
 async function loadCollaborators() {
     if (!currentDocId) return;
     try {
+        const listContainer = document.getElementById('share-collabs-list');
+        if (listContainer) {
+            listContainer.innerHTML = `
+                <div class="share-collab-item" style="pointer-events: none;">
+                    <div class="collab-info" style="width: 100%;">
+                        <div class="skeleton skeleton-text" style="width: 60%; margin-bottom: 6px;"></div>
+                        <div class="skeleton skeleton-text" style="width: 40%; margin-bottom: 0;"></div>
+                    </div>
+                </div>
+                <div class="share-collab-item" style="pointer-events: none;">
+                    <div class="collab-info" style="width: 100%;">
+                        <div class="skeleton skeleton-text" style="width: 50%; margin-bottom: 6px;"></div>
+                        <div class="skeleton skeleton-text" style="width: 30%; margin-bottom: 0;"></div>
+                    </div>
+                </div>
+            `;
+        }
+
         const docRes = await fetch(`/api/documents/${currentDocId}/`);
         const doc = await docRes.json();
         const isOwner = doc.user && userProfile && doc.user.id === userProfile.id;
