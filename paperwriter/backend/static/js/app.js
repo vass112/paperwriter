@@ -1201,11 +1201,6 @@ function handleEditorUpdate(sectionId, content) {
     updateSaveStatus('Unsaved changes...', '#f59e0b');
     updateStats();
 
-    clearTimeout(previewUpdateTimeout);
-    previewUpdateTimeout = setTimeout(() => {
-        updateLatexPreview();
-    }, 1000);
-
     clearTimeout(saveTimeout);
     saveTimeout = setTimeout(() => {
         saveSection(sectionId, content);
@@ -1534,6 +1529,7 @@ async function saveSection(sectionId, content) {
             sectionVersions[sectionId] = data.updated_at;
             updateSaveStatus('Autosaved', '#22c55e');
             setTimeout(() => updateSaveStatus('Autosaved', '#94a3b8'), 2000);
+            updateLatexPreview();
         } else {
             updateSaveStatus('Error saving!', '#ef4444');
         }
@@ -4409,20 +4405,20 @@ async function sendHeartbeat() {
         updateSectionLocks(data.locks);
         
         // Sync editor content from remote changes
+        let needsCompile = false;
         if (data.updated_sections && data.updated_sections.length > 0) {
             for (const updated of data.updated_sections) {
                 const editor = editors[updated.id];
                 if (editor && updated.content !== undefined) {
-                    const currentContent = editor.getHTML();
-                    if (currentContent !== updated.content) {
-                        editor.commands.setContent(prepareContentForEditor(updated.content));
-                        sectionVersions[updated.id] = updated.updated_at;
-                    }
+                    editor.commands.setContent(prepareContentForEditor(updated.content), false);
+                    sectionVersions[updated.id] = updated.updated_at;
+                    needsCompile = true;
                 }
             }
         }
+        if (needsCompile) updateLatexPreview();
         
-        // Update all_versions to detect deleted sections
+        // Update all_versions for any sections we might have missed
         if (data.all_versions) {
             for (const [id, ts] of Object.entries(data.all_versions)) {
                 if (sectionVersions[id] === undefined) {
