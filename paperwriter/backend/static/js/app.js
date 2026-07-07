@@ -766,7 +766,6 @@ function applyRoleRestrictions() {
 async function loadDocument(id) {
     try {
         currentDocId = id;
-        startHeartbeat();
         const shareBtn = document.getElementById('share-doc-btn');
         if (shareBtn) shareBtn.style.display = 'flex';
 
@@ -1041,6 +1040,7 @@ async function loadDocument(id) {
         addSectionBtn.onclick = () => createSection();
         nav.appendChild(addSectionBtn);
 
+        startHeartbeat();
         updateFigRefBars();
         await refreshPdfPreview();
 
@@ -4410,7 +4410,7 @@ async function sendHeartbeat() {
             for (const updated of data.updated_sections) {
                 const editor = editors[updated.id];
                 if (editor && updated.content !== undefined) {
-                    editor.commands.setContent(prepareContentForEditor(updated.content), false);
+                    editor.commands.setContent(prepareContentForEditor(updated.content), { emitUpdate: false });
                     sectionVersions[updated.id] = updated.updated_at;
                     needsCompile = true;
                 }
