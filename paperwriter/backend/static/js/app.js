@@ -110,6 +110,7 @@ let editors = {};
 let currentDocId = null;
 let saveTimeout;
 let previewUpdateTimeout;
+let sectionVersions = {};
 
 // Tables state
 let tablesList = [];
@@ -996,10 +997,7 @@ async function loadDocument(id) {
                         LatexRefNode,
                         LatexEqNode,
                     ],
-                    content: (section.content || '<p></p>')
-                        .replace(/\\(ref|cite)\{([^}]+)\}/g, '<span class="ref-chip" data-type="$1" data-label="$2"></span>')
-                        .replace(/\$\$([\s\S]+?)\$\$/g, (m, g1) => `<span class="eq-chip" data-type="block" data-latex="${escapeHtml(g1)}"></span>`)
-                        .replace(/\$([^$]+)\$/g, (m, g1) => `<span class="eq-chip" data-type="inline" data-latex="${escapeHtml(g1)}"></span>`),
+                    content: prepareContentForEditor(section.content),
                     onUpdate: ({ editor }) => {
                         handleEditorUpdate(section.id, editor.getHTML());
                     },
@@ -1018,6 +1016,7 @@ async function loadDocument(id) {
                 editors[section.id] = editor;
                 editors[section.id].sectionTitle = section.title;
                 editors[section.id].sectionType = section.section_type;
+                sectionVersions[section.id] = section.updated_at;
             } catch (err) {
                 console.error("Failed to initialize editor", section.id, err);
             }
@@ -1127,6 +1126,9 @@ async function saveSectionTitle(sectionId, newTitle) {
             body: JSON.stringify({ title: newTitle.trim() })
         });
         if (!response.ok) throw new Error("Failed to save section title");
+        
+        const data = await response.json();
+        sectionVersions[sectionId] = data.updated_at;
         
         // Update sidebar
         const navItemSpan = document.querySelector(`.nav-item[data-section-id="${sectionId}"] span, .nav-subitem[data-section-id="${sectionId}"] span`);
@@ -1528,6 +1530,8 @@ async function saveSection(sectionId, content) {
         });
 
         if (response.ok) {
+            const data = await response.json();
+            sectionVersions[sectionId] = data.updated_at;
             updateSaveStatus('Autosaved', '#22c55e');
             setTimeout(() => updateSaveStatus('Autosaved', '#94a3b8'), 2000);
         } else {
@@ -4361,6 +4365,13 @@ window.submitDashboardFeedback = async function(event) {
     }
 };
 
+function prepareContentForEditor(content) {
+    return (content || '<p></p>')
+        .replace(/\\(ref|cite)\{([^}]+)\}/g, '<span class="ref-chip" data-type="$1" data-label="$2"></span>')
+        .replace(/\$\$([\s\S]+?)\$\$/g, (m, g1) => `<span class="eq-chip" data-type="block" data-latex="${escapeHtml(g1)}"></span>`)
+        .replace(/\$([^$]+)\$/g, (m, g1) => `<span class="eq-chip" data-type="inline" data-latex="${escapeHtml(g1)}"></span>`);
+}
+
 // ============================================================
 // COLLABORATIVE EDITING & PRESENCE LOGIC
 // ============================================================
@@ -4386,13 +4397,39 @@ async function sendHeartbeat() {
             headers: {
                 'Content-Type': 'application/json',
                 'X-CSRFToken': getCsrfToken()
-            }
+            },
+            body: JSON.stringify({
+                section_versions: sectionVersions
+            })
         });
         if (!res.ok) return;
         
         const data = await res.json();
         renderCollaboratorAvatars(data.active_users);
         updateSectionLocks(data.locks);
+        
+        // Sync editor content from remote changes
+        if (data.updated_sections && data.updated_sections.length > 0) {
+            for (const updated of data.updated_sections) {
+                const editor = editors[updated.id];
+                if (editor && updated.content !== undefined) {
+                    const currentContent = editor.getHTML();
+                    if (currentContent !== updated.content) {
+                        editor.commands.setContent(prepareContentForEditor(updated.content));
+                        sectionVersions[updated.id] = updated.updated_at;
+                    }
+                }
+            }
+        }
+        
+        // Update all_versions to detect deleted sections
+        if (data.all_versions) {
+            for (const [id, ts] of Object.entries(data.all_versions)) {
+                if (sectionVersions[id] === undefined) {
+                    sectionVersions[id] = ts;
+                }
+            }
+        }
     } catch (e) {
         console.error("Heartbeat error:", e);
     }

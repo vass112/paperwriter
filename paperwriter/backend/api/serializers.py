@@ -70,7 +70,7 @@ class SectionSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Section
-        fields = ['id', 'title', 'content', 'order', 'section_type', 'parent', 'subsections']
+        fields = ['id', 'title', 'content', 'order', 'section_type', 'parent', 'subsections', 'updated_at']
         read_only_fields = []
         extra_kwargs = {
             'title': {'max_length': 200},

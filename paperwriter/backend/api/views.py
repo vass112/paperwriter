@@ -384,9 +384,44 @@ class DocumentViewSet(viewsets.ModelViewSet):
                 'locked_at': lock.locked_at.isoformat()
             }
             
+        client_versions = request.data.get('section_versions', {})
+        sections = Section.objects.filter(document=document).only('id', 'content', 'title', 'updated_at')
+        updated_sections = []
+        all_versions = {}
+        for s in sections:
+            all_versions[str(s.id)] = s.updated_at.isoformat() if s.updated_at else None
+            client_ts = client_versions.get(str(s.id))
+            if client_ts:
+                try:
+                    from datetime import datetime
+                    client_dt = datetime.fromisoformat(client_ts)
+                    if s.updated_at and s.updated_at > client_dt:
+                        updated_sections.append({
+                            'id': s.id,
+                            'content': s.content,
+                            'title': s.title,
+                            'updated_at': s.updated_at.isoformat()
+                        })
+                except (ValueError, TypeError):
+                    updated_sections.append({
+                        'id': s.id,
+                        'content': s.content,
+                        'title': s.title,
+                        'updated_at': s.updated_at.isoformat() if s.updated_at else None
+                    })
+            else:
+                updated_sections.append({
+                    'id': s.id,
+                    'content': s.content,
+                    'title': s.title,
+                    'updated_at': s.updated_at.isoformat() if s.updated_at else None
+                })
+
         return Response({
             'active_users': active_users,
-            'locks': locks_data
+            'locks': locks_data,
+            'updated_sections': updated_sections,
+            'all_versions': all_versions
         })
 
 

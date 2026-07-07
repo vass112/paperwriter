@@ -115,6 +115,7 @@ class Section(models.Model):
     content = models.TextField(default="")
     order = models.IntegerField()
     section_type = models.CharField(max_length=50, choices=SECTION_TYPES, default='custom')
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ['order']
