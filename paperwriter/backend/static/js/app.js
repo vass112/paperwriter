@@ -1042,10 +1042,6 @@ async function loadDocument(id) {
         addSectionBtn.onclick = () => createSection();
         nav.appendChild(addSectionBtn);
 
-        // Setup Real-time connections
-        setupEditorPresence(id);
-        setupDocumentWebSocket(id);
-
         updateFigRefBars();
         await refreshPdfPreview();
 

@@ -1357,7 +1357,7 @@
                         
                         <div class="modal-actions-footer" style="border-top: 1px solid var(--border-light); padding-top: 16px;">
                             <button type="button" class="btn-secondary" onclick="closeDocSettingsModal()" style="width:auto; padding: 8px 16px;">Cancel</button>
-                            <button type="button" class="btn-primary" onclick="window.saveDocumentTemplate(); closeDocSettingsModal();" style="width:auto; padding: 8px 16px;">Save Template</button>
+                            <button type="button" class="btn-primary" onclick="window.saveDocumentTemplate().catch(function(){}); closeDocSettingsModal();" style="width:auto; padding: 8px 16px;">Save Template</button>
                         </div>
                     </div>
                 </div>

@@ -14,8 +14,8 @@ class TemplateCoverageTests(TestCase):
 
     def test_all_templates_compile_without_errors(self):
         from .templates.registry import TemplateRegistry
-        for template_class in TemplateRegistry.choices():
-            template_instance = template_class()
+        for template_id, _ in TemplateRegistry.choices():
+            template_instance = TemplateRegistry.get(template_id)
             try:
                 # Test preamble
                 preamble = template_instance.build_preamble(self.document)
@@ -31,4 +31,4 @@ class TemplateCoverageTests(TestCase):
                 self.assertIn(r'\begin{document}', latex_source)
                 self.assertIn(r'\end{document}', latex_source)
             except Exception as e:
-                self.fail(f'Template {template_class.id} failed with exception: {e}')
+                self.fail(f'Template {template_instance.id} failed with exception: {e}')

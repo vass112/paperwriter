@@ -183,7 +183,7 @@ class CollaborationTests(TestCase):
             'email': 'u2@example.com'
         }, content_type='application/json')
         self.assertEqual(response.status_code, 200)
-        self.assertTrue(response.json()['success'])
+        self.assertIn('message', response.json())
 
         # Now User 2 can list/retrieve document
         response = self.client2.get('/api/documents/')

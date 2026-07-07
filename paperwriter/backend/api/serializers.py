@@ -186,6 +186,20 @@ class DocumentSerializer(serializers.ModelSerializer):
             'index_terms': {'max_length': 500},
         }
 
+    def validate(self, data):
+        from .models import TEMPLATE_STYLES
+        template = data.get('template')
+        style = data.get('template_style')
+
+        if template and style:
+            valid_styles = dict(TEMPLATE_STYLES.get(template, []))
+            if style not in valid_styles:
+                raise serializers.ValidationError({
+                    'template_style': f"'{style}' is not a valid style for template '{template}'. Valid styles: {', '.join(valid_styles.keys())}"
+                })
+
+        return data
+
     def get_sections(self, obj):
         top_sections = obj.sections.filter(parent=None).order_by('order')
         return SectionSerializer(top_sections, many=True, context=self.context).data

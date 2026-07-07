@@ -187,6 +187,9 @@ class IsOwnerOrReadOnly(IsAuthenticated):
     def has_object_permission(self, request, view, obj):
         if request.method in ('GET', 'HEAD', 'OPTIONS'):
             return True
+        action = getattr(view, 'action', None)
+        if action in ('heartbeat', 'share', 'unshare', 'collaborators'):
+            return True
         if not hasattr(obj, 'user'):
             return True
         return obj.user == request.user
@@ -195,7 +198,7 @@ class IsOwnerOrReadOnly(IsAuthenticated):
 class DocumentViewSet(viewsets.ModelViewSet):
     queryset = Document.objects.all()
     serializer_class = DocumentSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsOwnerOrReadOnly]
 
     def get_queryset(self):
         if self.request.user.is_authenticated:
@@ -1332,23 +1335,4 @@ def contact_inquiry(request):
     )
     return Response({'success': True})
 
-@api_view(['POST'])
-def change_template(request, doc_id):
-    """Change document template and/or style"""
-    try:
-        document = Document.objects.get(id=doc_id)
-        if not can_view_document(document, request.user):
-            return Response({'error': 'Not found'}, status=404)
-            
-        template_id = request.data.get('template')
-        style_id = request.data.get('template_style')
-        
-        if template_id:
-            document.template = template_id
-        if style_id:
-            document.template_style = style_id
-            
-        document.save()
-        return Response(DocumentSerializer(document).data)
-    except Document.DoesNotExist:
-        return Response({'error': 'Document not found'}, status=404)
+
