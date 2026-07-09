@@ -3293,6 +3293,11 @@ function switchEquationTab(tab) {
     }
     const activeContent = document.getElementById(`eq-tab-content-${tab}`);
     if (activeContent) activeContent.style.display = 'block';
+
+    if (tab === 'visual') {
+        initMqField();
+        setTimeout(() => { if (window.mqField) mqField.focus(); }, 150);
+    }
 }
 window.switchEquationTab = switchEquationTab;
 
@@ -3419,6 +3424,194 @@ function insertEquationIntoDoc() {
     updateLatexPreview();
 }
 window.insertEquationIntoDoc = insertEquationIntoDoc;
+
+// ============================================================
+// MATHQUILL VISUAL EQUATION EDITOR
+// ============================================================
+
+const mqToolbarGroups = [
+    {
+        label: 'Greek',
+        buttons: [
+            { label: 'α', cmd: '\\alpha' }, { label: 'β', cmd: '\\beta' },
+            { label: 'γ', cmd: '\\gamma' }, { label: 'δ', cmd: '\\delta' },
+            { label: 'ε', cmd: '\\epsilon' }, { label: 'θ', cmd: '\\theta' },
+            { label: 'λ', cmd: '\\lambda' }, { label: 'μ', cmd: '\\mu' },
+            { label: 'π', cmd: '\\pi' }, { label: 'σ', cmd: '\\sigma' },
+            { label: 'τ', cmd: '\\tau' }, { label: 'φ', cmd: '\\phi' },
+            { label: 'ψ', cmd: '\\psi' }, { label: 'ω', cmd: '\\omega' },
+            { label: 'Γ', cmd: '\\Gamma' }, { label: 'Δ', cmd: '\\Delta' },
+            { label: 'Θ', cmd: '\\Theta' }, { label: 'Π', cmd: '\\Pi' },
+            { label: 'Σ', cmd: '\\Sigma' }, { label: 'Φ', cmd: '\\Phi' },
+            { label: 'Ω', cmd: '\\Omega' },
+        ]
+    },
+    {
+        label: 'Operators',
+        buttons: [
+            { label: '∫', cmd: '\\int' }, { label: '∑', cmd: '\\sum' },
+            { label: '∏', cmd: '\\prod' }, { label: '√', cmd: '\\sqrt' },
+            { label: '∛', cmd: '\\sqrt[3]' }, { label: '∂', cmd: '\\partial' },
+            { label: '∞', cmd: '\\infty' }, { label: '∇', cmd: '\\nabla' },
+            { label: '±', cmd: '\\pm' }, { label: '×', cmd: '\\times' },
+            { label: '÷', cmd: '\\div' },
+        ]
+    },
+    {
+        label: 'Structures',
+        buttons: [
+            { label: 'a/b', cmd: '\\frac' },
+            { label: 'xⁿ', cmd: '^', typed: true },
+            { label: 'xₙ', cmd: '_', typed: true },
+            { label: 'x̄', cmd: '\\overline' },
+            { label: 'x̂', cmd: '\\hat' },
+            { label: 'x̃', cmd: '\\tilde' },
+            { label: 'x⃗', cmd: '\\vec' },
+            { label: 'ẋ', cmd: '\\dot' },
+            { label: 'ẍ', cmd: '\\ddot' },
+        ]
+    },
+    {
+        label: 'Relations',
+        buttons: [
+            { label: '=', cmd: '=' }, { label: '≠', cmd: '\\neq' },
+            { label: '≈', cmd: '\\approx' }, { label: '≡', cmd: '\\equiv' },
+            { label: '∼', cmd: '\\sim' }, { label: '∝', cmd: '\\propto' },
+            { label: '≤', cmd: '\\leq' }, { label: '≥', cmd: '\\geq' },
+            { label: '≪', cmd: '\\ll' }, { label: '≫', cmd: '\\gg' },
+        ]
+    },
+    {
+        label: 'Arrows',
+        buttons: [
+            { label: '→', cmd: '\\rightarrow' }, { label: '←', cmd: '\\leftarrow' },
+            { label: '⇒', cmd: '\\Rightarrow' }, { label: '⇐', cmd: '\\Leftarrow' },
+            { label: '↔', cmd: '\\leftrightarrow' }, { label: '⇔', cmd: '\\Leftrightarrow' },
+            { label: '⟶', cmd: '\\longrightarrow' }, { label: '⟵', cmd: '\\longleftarrow' },
+        ]
+    },
+    {
+        label: 'Sets',
+        buttons: [
+            { label: 'ℝ', cmd: '\\mathbb{R}' }, { label: 'ℤ', cmd: '\\mathbb{Z}' },
+            { label: 'ℕ', cmd: '\\mathbb{N}' }, { label: 'ℂ', cmd: '\\mathbb{C}' },
+            { label: 'ℚ', cmd: '\\mathbb{Q}' }, { label: '∅', cmd: '\\emptyset' },
+            { label: '∈', cmd: '\\in' }, { label: '∉', cmd: '\\notin' },
+            { label: '⊂', cmd: '\\subset' }, { label: '∪', cmd: '\\cup' },
+            { label: '∩', cmd: '\\cap' }, { label: '∀', cmd: '\\forall' },
+            { label: '∃', cmd: '\\exists' }, { label: '∠', cmd: '\\angle' },
+        ]
+    },
+    {
+        label: 'Functions',
+        buttons: [
+            { label: 'sin', cmd: '\\sin' }, { label: 'cos', cmd: '\\cos' },
+            { label: 'tan', cmd: '\\tan' }, { label: 'log', cmd: '\\log' },
+            { label: 'ln', cmd: '\\ln' }, { label: 'lim', cmd: '\\lim' },
+            { label: 'exp', cmd: '\\exp' }, { label: 'max', cmd: '\\max' },
+            { label: 'min', cmd: '\\min' }, { label: 'det', cmd: '\\det' },
+        ]
+    },
+];
+
+function buildMqToolbar() {
+    const container = document.getElementById('mq-toolbar');
+    if (!container || container._built) return;
+    container._built = true;
+
+    mqToolbarGroups.forEach((group) => {
+        const groupEl = document.createElement('div');
+        groupEl.className = 'mq-toolbar-group';
+
+        group.buttons.forEach((btn) => {
+            const el = document.createElement('button');
+            el.type = 'button';
+            el.className = 'mq-toolbar-btn';
+            el.textContent = btn.label;
+            el.title = btn.cmd;
+            el.addEventListener('click', (e) => {
+                e.preventDefault();
+                mqToolbarCmd(btn);
+            });
+            groupEl.appendChild(el);
+        });
+
+        container.appendChild(groupEl);
+    });
+}
+
+function mqToolbarCmd(btn) {
+    if (!window.mqField) return;
+    window.mqField.focus();
+    if (btn.typed) {
+        window.mqField.typedText(btn.cmd);
+    } else {
+        window.mqField.cmd(btn.cmd);
+    }
+    window.mqField.focus();
+}
+
+function initMqField() {
+    if (window.mqField) return;
+    const mqEl = document.getElementById('mq-editor');
+    if (!mqEl || typeof MathQuill === 'undefined') return;
+
+    try {
+        const MQ = MathQuill.getInterface(2);
+
+        buildMqToolbar();
+
+        window.mqField = MQ.MathField(mqEl, {
+            spaceBehavesLikeTab: true,
+            autoSubscriptNumerals: true,
+            handlers: {
+                edit: function () {
+                    syncMqLatex();
+                },
+            },
+        });
+
+        const clearBtn = document.querySelector('#eq-tab-content-visual .btn-secondary');
+        if (clearBtn) {
+            clearBtn.onclick = function () {
+                if (window.mqField) {
+                    window.mqField.latex('');
+                    window.mqField.focus();
+                    syncMqLatex();
+                }
+            };
+        }
+    } catch (e) {
+        console.error('MathQuill init error:', e);
+    }
+}
+
+let mqLastLatex = '';
+let mqSyncTimer = null;
+function syncMqLatex() {
+    clearTimeout(mqSyncTimer);
+    mqSyncTimer = setTimeout(function () {
+        if (!window.mqField) return;
+        const latex = window.mqField.latex();
+        if (latex && latex !== mqLastLatex) {
+            mqLastLatex = latex;
+            showEquationOutput(latex, 'eq:visual');
+        } else if (!latex) {
+            mqLastLatex = '';
+            document.getElementById('eq-preview-area').style.display = 'none';
+        }
+    }, 200);
+}
+
+// Override close to clean up MathQuill active state
+const origCloseEquationModal = closeEquationModal;
+closeEquationModal = function () {
+    if (window.mqField) {
+        try { window.mqField.blur(); } catch (e) { /* ignore */ }
+    }
+    origCloseEquationModal();
+};
+window.closeEquationModal = closeEquationModal;
 
 // ============================================================
 // DOI FETCH

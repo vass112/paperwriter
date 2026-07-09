@@ -33,6 +33,7 @@
     </script>
     <meta name="description" content="PaperWriter: A premium scholarly workspace for authoring, formatting, and exporting IEEE-style research papers.">
     <link rel="stylesheet" href="/static/css/style.css?v=52">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/mathquill@0.10.1/build/mathquill.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
@@ -843,6 +844,7 @@
                 <button type="button" class="modal-tab-btn active" id="eq-tab-btn-text" onclick="switchEquationTab('text')" style="padding: 12px 16px; font-size: 12px; font-weight: 600; border: none; background: transparent; cursor: pointer; color: var(--brand-500); border-bottom: 2px solid transparent; outline: none; width: auto;">AI Describe</button>
                 <button type="button" class="modal-tab-btn" id="eq-tab-btn-vision" onclick="switchEquationTab('vision')" style="padding: 12px 16px; font-size: 12px; font-weight: 600; border: none; background: transparent; cursor: pointer; color: var(--brand-500); border-bottom: 2px solid transparent; outline: none; width: auto;">AI Scan Image</button>
                 <button type="button" class="modal-tab-btn" id="eq-tab-btn-presets" onclick="switchEquationTab('presets')" style="padding: 12px 16px; font-size: 12px; font-weight: 600; border: none; background: transparent; cursor: pointer; color: var(--brand-500); border-bottom: 2px solid transparent; outline: none; width: auto;">Presets</button>
+                <button type="button" class="modal-tab-btn" id="eq-tab-btn-visual" onclick="switchEquationTab('visual')" style="padding: 12px 16px; font-size: 12px; font-weight: 600; border: none; background: transparent; cursor: pointer; color: var(--brand-500); border-bottom: 2px solid transparent; outline: none; width: auto;">Visual Editor</button>
             </div>
             
             <div class="modal-body scroll-minimal" style="padding: 24px; max-height: 480px; overflow-y: auto;">
@@ -873,6 +875,14 @@
                     </div>
                 </div>
                 
+                <!-- Tab D: Visual Editor -->
+                <div id="eq-tab-content-visual" class="eq-tab-content" style="display: none;">
+                    <p style="font-size:12px; color:var(--brand-500); margin-bottom:12px;">Build your equation visually — click symbols or type LaTeX directly.</p>
+                    <div id="mq-toolbar" class="mq-toolbar"></div>
+                    <div id="mq-editor" class="mq-field" style="border:1px solid var(--brand-200); border-radius:var(--radius-sm); padding:10px; min-height:48px; background:#fff; margin-top:8px;"></div>
+                    <button type="button" class="btn-secondary" onclick="mqField && mqField.focus()" style="width:auto; margin-top:6px; font-size:11px; padding:4px 10px;">Clear</button>
+                </div>
+
                 <!-- Live LaTeX & Math Preview Area -->
                 <div id="eq-preview-area" style="margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--brand-200); display: none;">
                     <div class="modal-input-group">
@@ -1451,6 +1461,7 @@
     </div>
 
     <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/mathquill@0.10.1/build/mathquill.min.js"></script>
     <script type="module" src="/static/js/app.js?v=52"></script>
 </body>
 

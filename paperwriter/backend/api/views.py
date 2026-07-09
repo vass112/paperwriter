@@ -2,6 +2,7 @@ from django.shortcuts import render
 from rest_framework import viewsets, generics, status
 from rest_framework.response import Response
 from rest_framework.decorators import api_view, action, permission_classes, throttle_classes
+from django.views.decorators.csrf import csrf_exempt
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnly, AllowAny
 from rest_framework.throttling import UserRateThrottle, AnonRateThrottle
@@ -108,10 +109,14 @@ def dev_login(request):
 @api_view(['POST'])
 @throttle_classes([AnonRateThrottle, UserRateThrottle])
 @permission_classes([AllowAny])
+@csrf_exempt
 def google_auth(request):
+    if not request.data:
+        body = request.body
+        return Response({'error': f'Empty request body. Content-Type: {request.content_type}, Length: {len(body)}'}, status=400)
     token = request.data.get('token')
     if not token:
-        return Response({'error': 'Token is required'}, status=400)
+        return Response({'error': f'Token is required. Received keys: {list(request.data.keys())}'}, status=400)
     if not settings.GOOGLE_CLIENT_ID:
         return Response({'error': 'Google Client ID not configured'}, status=500)
     try:
@@ -134,8 +139,10 @@ def google_auth(request):
         if profile:
             consent = profile.dpdp_consent_processing
         return Response({'success': True, 'dpdp_consent': consent})
+    except ValueError as e:
+        return Response({'error': f'Token verification failed: {str(e)}'}, status=400)
     except Exception as e:
-        return Response({'error': 'Authentication failed'}, status=400)
+        return Response({'error': f'Authentication failed: {type(e).__name__}'}, status=400)
 
 
 @api_view(['POST'])
