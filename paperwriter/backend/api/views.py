@@ -111,14 +111,35 @@ def dev_login(request):
 @permission_classes([AllowAny])
 @csrf_exempt
 def google_auth(request):
-    if not request.data:
-        body = request.body
-        return Response({'error': f'Empty request body. Content-Type: {request.content_type}, Length: {len(body)}'}, status=400)
-    token = request.data.get('token')
+    import json as _json
+    token = None
+
+    # Try DRF's parsed request.data first
+    if request.data:
+        token = request.data.get('token')
+
+    # Fallback: parse raw body directly (handles edge cases where
+    # Content-Type or encoding is mangled by CDN/proxy)
+    if not token and request.body:
+        try:
+            body = _json.loads(request.body)
+            token = body.get('token')
+        except (_json.JSONDecodeError, Exception):
+            body = {}
+
     if not token:
-        return Response({'error': f'Token is required. Received keys: {list(request.data.keys())}'}, status=400)
+        return Response({
+            'error': 'Token is required',
+            'diagnostic': {
+                'drf_data_keys': list(request.data.keys()) if request.data else None,
+                'body_length': len(request.body) if request.body else 0,
+                'content_type': request.content_type,
+            }
+        }, status=400)
+
     if not settings.GOOGLE_CLIENT_ID:
         return Response({'error': 'Google Client ID not configured'}, status=500)
+
     try:
         idinfo = id_token.verify_oauth2_token(token, google_requests.Request(), settings.GOOGLE_CLIENT_ID)
         email = idinfo['email']
@@ -133,16 +154,20 @@ def google_auth(request):
                 'last_name': last_name
             }
         )
+
         login(request, user)
-        profile = getattr(user, 'profile', None)
-        consent = False
-        if profile:
+
+        try:
+            profile = user.profile
             consent = profile.dpdp_consent_processing
-        return Response({'success': True, 'dpdp_consent': consent})
+        except Exception:
+            consent = False
+
+        return Response({'success': True, 'dpdp_consent': consent, 'created': created})
     except ValueError as e:
         return Response({'error': f'Token verification failed: {str(e)}'}, status=400)
     except Exception as e:
-        return Response({'error': f'Authentication failed: {type(e).__name__}'}, status=400)
+        return Response({'error': f'Authentication failed: {type(e).__name__}: {str(e)}'}, status=400)
 
 
 @api_view(['POST'])

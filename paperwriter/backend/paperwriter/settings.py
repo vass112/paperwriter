@@ -180,6 +180,12 @@ if not DEBUG:
 # which Google Identity Services requires to return credentials from the popup.
 SECURE_CROSS_ORIGIN_OPENER_POLICY = 'unsafe-none'
 
+# Vercel terminates SSL at the edge and forwards HTTP to the serverless function.
+# This tells Django to trust the X-Forwarded-Proto header so it knows the
+# original request was HTTPS. Required for SESSION_COOKIE_SECURE, CSRF_COOKIE_SECURE,
+# and SECURE_SSL_REDIRECT to work correctly on Vercel.
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
 # === DRF CONFIGURATION ===
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
