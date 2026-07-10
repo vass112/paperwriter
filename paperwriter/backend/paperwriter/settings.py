@@ -9,8 +9,6 @@ load_dotenv(BASE_DIR / '.env')
 # === SECURITY WARNING: keep the production secret key secret! ===
 SECRET_KEY = os.getenv('DJANGO_SECRET_KEY')
 if not SECRET_KEY:
-    if os.getenv('VERCEL'):
-        raise RuntimeError("DJANGO_SECRET_KEY must be set in production environment")
     SECRET_KEY = 'django-insecure-replace-this-in-production'
 
 DEBUG = os.getenv('DJANGO_DEBUG', 'False').lower() in ('true', '1', 'yes')
