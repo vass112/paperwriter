@@ -25,7 +25,7 @@ import html as html_module
 
 # === CONSTANTS ===
 ALLOWED_IMAGE_TYPES = {'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml'}
-MAX_IMAGE_SIZE = 10 * 1024 * 1024  # 10MB
+MAX_IMAGE_SIZE = 4 * 1024 * 1024  # 4MB (Vercel serverless body limit is 4.5MB)
 MAX_SECTION_CONTENT_LENGTH = 100000  # ~100KB
 MAX_BIBTEX_LENGTH = 50000
 ALLOWED_LATEX_COMMANDS = set()

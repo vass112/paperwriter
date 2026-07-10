@@ -2022,8 +2022,9 @@ async function uploadImage(file) {
         formData.append('document', currentDocId);
         formData.append('image', file);
         formData.append('caption', file.name.replace(/\.[^.]+$/, ''));
-        formData.append('label', 'fig:' + file.name.replace(/\.[^.]+$/, '').toLowerCase().replace(/\s+/g, '-'));
+        formData.append('label', 'fig:' + file.name.replace(/\.[^.]+$/, '').toLowerCase().replace(/[^a-z0-9_]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '') || 'img');
         formData.append('width', '0.9');
+        if (lastFocusedEditorId) formData.append('section', lastFocusedEditorId);
         formData.append('order', imagesData.length);
 
         const res = await fetch('/api/images/', { 
@@ -2033,8 +2034,14 @@ async function uploadImage(file) {
         });
 
         if (!res.ok) {
-            const err = await res.json();
-            throw new Error(JSON.stringify(err));
+            let errMsg;
+            try {
+                const err = await res.json();
+                errMsg = JSON.stringify(err);
+            } catch {
+                errMsg = await res.text();
+            }
+            throw new Error(errMsg);
         }
 
         const newImg = await res.json();
@@ -3416,8 +3423,8 @@ function insertEquationIntoDoc() {
     const editor = editors[activeId];
     if (!editor) return;
 
-    const labelStr = label ? ` \\label{${label}}` : '';
-    const formulaBlock = `\n\\begin{equation}${labelStr}\n${latex}\n\\end{equation}\n`;
+    const labelStr = label ? `\\label{${label}} ` : '';
+    const formulaBlock = `\n$$${labelStr}\n${latex}\n$$\n`;
     
     editor.chain().focus().insertContent(formulaBlock).run();
     closeEquationModal();
@@ -4168,7 +4175,7 @@ window.loadDashboard = async function() {
     }
     
     try {
-        const grid = document.getElementById('dashboard-grid');
+        let grid = document.getElementById('dashboard-grid');
         if (grid) {
             grid.innerHTML = `
                 <div class="document-card" style="pointer-events: none;">
@@ -4204,7 +4211,7 @@ window.loadDashboard = async function() {
         const response = await fetch('/api/documents/');
         const docs = await response.json();
         
-        const grid = document.getElementById('dashboard-grid');
+        grid = document.getElementById('dashboard-grid');
         grid.innerHTML = '';
         
         docs.forEach(doc => {
@@ -4801,7 +4808,7 @@ window.closeShareModal = function() {
 async function loadCollaborators() {
     if (!currentDocId) return;
     try {
-        const listContainer = document.getElementById('share-collabs-list');
+        let listContainer = document.getElementById('share-collabs-list');
         if (listContainer) {
             listContainer.innerHTML = `
                 <div class="share-collab-item" style="pointer-events: none;">
@@ -4843,7 +4850,7 @@ async function loadCollaborators() {
         const collabRes = await fetch(`/api/documents/${currentDocId}/collaborators/`);
         const collabs = await collabRes.json();
         
-        const listContainer = document.getElementById('share-collabs-list');
+        listContainer = document.getElementById('share-collabs-list');
         if (!listContainer) return;
         
         const ownerName = doc.user ? `${doc.user.first_name} ${doc.user.last_name}`.trim() || doc.user.username : 'Unknown';

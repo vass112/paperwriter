@@ -202,10 +202,13 @@ class BaseTemplate:
         lines = []
         
         all_images = list(document.images.all().order_by('order', 'uploaded_at'))
+        orphan_images = []
         section_images = {}
         for img in all_images:
             if img.section_id:
                 section_images.setdefault(img.section_id, []).append(img)
+            else:
+                orphan_images.append(img)
                 
         all_tables = list(document.tables.all().order_by('order', 'created_at'))
         section_tables = {}
@@ -252,6 +255,10 @@ class BaseTemplate:
 
         for section in document.sections.filter(parent=None).order_by('order'):
             lines.extend(emit_section(section, 1))
+
+        for img in orphan_images:
+            if img.id not in emitted_image_ids:
+                lines.extend(self.emit_figure(img))
 
         return '\n'.join(lines)
 

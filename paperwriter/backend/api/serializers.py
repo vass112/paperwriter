@@ -150,7 +150,10 @@ class PaperImageSerializer(serializers.ModelSerializer):
         image_file = validated_data.pop('image', None)
         instance = super().create(validated_data)
         if image_file:
-            instance.filename = image_file.name
+            name = image_file.name
+            name = re.sub(r'[^a-zA-Z0-9_.-]', '_', name)
+            name = re.sub(r'_+', '_', name)
+            instance.filename = name
             instance.image_base64 = base64.b64encode(image_file.read()).decode('utf-8')
             instance.save()
         return instance
