@@ -23,5 +23,5 @@ RUN DJANGO_SETTINGS_MODULE=paperwriter.settings python manage.py collectstatic -
 
 EXPOSE 8000
 
-# Daphne ASGI server
-CMD ["daphne", "-b", "0.0.0.0", "-p", "8000", "paperwriter.asgi:application"]
+# Daphne ASGI server — use $PORT if set (Railway), else 8000
+CMD daphne -b 0.0.0.0 -p ${PORT:-8000} paperwriter.asgi:application
