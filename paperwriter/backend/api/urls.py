@@ -3,7 +3,8 @@ from rest_framework import routers
 from .views import (
     DocumentViewSet, AuthorViewSet, PaperImageViewSet, ReferenceViewSet, SectionViewSet,
     PaperTableViewSet, CommentViewSet, process_ai_command, process_ai_equation, fetch_doi,
-    export_latex, get_latex_source, export_pdf, preview_pdf, google_auth, dev_login, logout_user, user_profile, delete_account,
+    export_latex, get_latex_source, export_pdf, preview_pdf, google_auth, dev_login, dev_login_as,
+    logout_user, user_profile, delete_account, ws_token,
     get_credits, buy_credits, payment_callback, redeem_code, contact_inquiry
 )
 
@@ -20,7 +21,9 @@ urlpatterns = [
     path('', include(router.urls)),
     path('auth/google/', google_auth, name='google_auth'),
     path('auth/dev-login/', dev_login, name='dev_login'),
+    path('auth/dev-login-as/', dev_login_as, name='dev_login_as'),
     path('auth/logout/', logout_user, name='logout_user'),
+    path('auth/ws-token/', ws_token, name='ws_token'),
     path('auth/profile/', user_profile, name='user_profile'),
     path('auth/delete_account/', delete_account, name='delete_account'),
     path('ai/command', process_ai_command, name='process_ai_command'),

@@ -8,6 +8,7 @@
     <script src="https://accounts.google.com/gsi/client" async defer onerror="document.body.innerHTML='<div style=\'padding: 20px; font-family: sans-serif; text-align: center;\'><h2 style=\'color:#ef4444;\'>Login temporarily unavailable</h2><p>Could not load Google Identity Services.</p></div>'"></script>
     <script>
         window.GOOGLE_CLIENT_ID = "{{ google_client_id|escapejs }}";
+        window.PAPERWRITER_WS_URL = "{{ ws_url }}";
         window.handleCredentialResponse = function(response) {
             if (window._realHandleCredentialResponse) {
                 window._realHandleCredentialResponse(response);
@@ -123,7 +124,7 @@
         <!-- ===== TOP HEADER BAR ===== -->
         <header class="main-header" id="main-header">
             <div class="header-left">
-                <div class="header-brand" style="cursor: pointer;" onclick="if(typeof loadDashboard === 'function') loadDashboard();" title="Return to Dashboard">
+                <div class="header-brand" style="cursor: pointer;" onclick="if(typeof loadDashboard === 'function') { window.history.pushState({}, '', '/'); loadDashboard(); }" title="Return to Dashboard">
                     <div class="brand-icon"><img src="/static/images/logo.png" alt="PaperWriter Logo"></div>
                     <span class="brand-name">PaperWriter</span>
                 </div>
@@ -165,6 +166,7 @@
                     }
                 </style>
                 <div id="collab-avatars-group" class="collab-avatars-group" style="display: none; align-items: center; gap: 4px; margin-right: 12px;"></div>
+                <div id="collab-connection-status" class="connection-status" style="display: none; margin-right: 8px;" title="Real-time sync active"></div>
                 <button id="share-doc-btn" class="btn-ghost" style="display: none; height: 32px; padding: 0 12px; font-size: 12px; font-weight: 600; margin-right: 12px; align-items: center; gap: 6px; border: 1px solid var(--border-light); background: transparent;" onclick="openShareModal()">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: block;"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8M16 6l-4-4-4 4M12 2v13"/></svg>
                     Share
@@ -900,6 +902,7 @@
                         </div>
                     </div>
                     
+                    <div id="eq-error-msg" style="display: none; margin-top: 12px; padding: 8px 12px; background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; border-radius: var(--radius-sm); font-size: 13px;"></div>
                     <div class="modal-actions-footer" style="margin-top: 20px; padding-top: 0; display: flex; justify-content: flex-end; gap: 8px;">
                         <button type="button" class="btn-secondary" onclick="closeEquationModal()" style="width:auto; padding: 8px 16px;">Cancel</button>
                         <button type="button" class="btn-primary" onclick="insertEquationIntoDoc()" style="width:auto; padding: 8px 16px;">Insert into Document</button>

@@ -22,12 +22,18 @@ else:
         ALLOWED_HOSTS.extend(['.vercel.app', 'paperwriter.app'])
     if os.getenv('VERCEL_URL'):
         ALLOWED_HOSTS.append(os.getenv('VERCEL_URL'))
-    
+    # Koyeb WebSocket server: auto-detect hostname from KOYEB_APP_URL
+    if os.getenv('KOYEB_APP_URL'):
+        ALLOWED_HOSTS.append(os.getenv('KOYEB_APP_URL').replace('https://', '').replace('http://', ''))
+    if os.getenv('KOYEB_PUBLIC_DOMAIN'):
+        ALLOWED_HOSTS.append(os.getenv('KOYEB_PUBLIC_DOMAIN'))
+
     if not ALLOWED_HOSTS:
         raise RuntimeError("ALLOWED_HOSTS must be set in production")
 
 # Application definition
 INSTALLED_APPS = [
+    'daphne',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -36,6 +42,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'corsheaders',
+    'channels',
     'api',
 ]
 
@@ -70,6 +77,23 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'paperwriter.wsgi.application'
+ASGI_APPLICATION = 'paperwriter.asgi.application'
+
+# Channel Layers (WebSocket support)
+# Use Redis if available (required for multi-instance deployments),
+# fall back to InMemoryChannelLayer for single-instance free tier.
+_channel_layer_config = {
+    'default': {
+        'BACKEND': 'channels.layers.InMemoryChannelLayer',
+        'CONFIG': {'capacity': 1000},
+    },
+}
+if os.getenv('REDIS_URL'):
+    _channel_layer_config['default'] = {
+        'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        'CONFIG': {'hosts': [os.getenv('REDIS_URL')]},
+    }
+CHANNEL_LAYERS = _channel_layer_config
 
 # Database
 import shutil
@@ -90,7 +114,7 @@ DATABASES = {
     }
 }
 
-if os.getenv('DATABASE_URL'):
+if not DEBUG and os.getenv('DATABASE_URL'):
     DATABASES['default'] = dj_database_url.config(
         conn_max_age=600,
         ssl_require=True
@@ -129,6 +153,16 @@ STATICFILES_DIRS = [
     BASE_DIR / "static",
 ]
 
+# WhiteNoise: enable compression and long-term caching for static assets
+WHITENOISE_USE_FINDERS = True
+WHITENOISE_MAX_AGE = 0 if DEBUG else 31536000  # No cache in dev, 1 year in prod
+if not DEBUG:
+    STORAGES = {
+        'staticfiles': {
+            'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
+        },
+    }
+
 # Media files (uploaded images)
 MEDIA_URL = '/media/'
 if 'VERCEL' in os.environ:
@@ -153,6 +187,8 @@ if DEBUG:
 else:
     CORS_ALLOW_ALL_ORIGINS = False
     CORS_ALLOWED_ORIGINS = os.getenv('CORS_ALLOWED_ORIGINS', '').split(',') if os.getenv('CORS_ALLOWED_ORIGINS') else []
+    # Always allow the main frontend domain
+    CORS_ALLOWED_ORIGINS.append('https://paperwriter.app')
     CORS_ALLOW_CREDENTIALS = True
 
 GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID', '')
@@ -197,8 +233,8 @@ REST_FRAMEWORK = {
         'rest_framework.throttling.UserRateThrottle',
     ],
     'DEFAULT_THROTTLE_RATES': {
-        'anon': '20/hour',
-        'user': '200/hour',
+        'anon': '1000/hour' if DEBUG else '20/hour',
+        'user': '10000/hour' if DEBUG else '200/hour',
     },
     'DEFAULT_RENDERER_CLASSES': [
         'rest_framework.renderers.JSONRenderer',
@@ -265,3 +301,6 @@ else:
 
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', CONTACT_EMAIL)
 FRONTEND_URL = os.getenv('FRONTEND_URL', 'https://paperwriter.app')
+
+# WebSocket server URL — set on Koyeb so the frontend knows where to connect
+WS_SERVER_URL = os.getenv('WS_SERVER_URL', '')  # e.g. 'wss://your-app.koyeb.app'

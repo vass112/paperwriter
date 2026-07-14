@@ -78,8 +78,10 @@ class SectionSerializer(serializers.ModelSerializer):
         }
 
     def get_subsections(self, obj):
-        serializer = SectionSerializer(obj.subsections.all(), many=True, context=self.context)
-        return serializer.data
+        subsecs = obj.subsections.all()
+        if hasattr(subsecs, '_prefetched_objects_cache'):
+            pass
+        return SectionSerializer(subsecs, many=True, context=self.context).data
 
     def validate_content(self, value):
         if value and len(value) > 100000:
@@ -168,6 +170,19 @@ class PaperImageSerializer(serializers.ModelSerializer):
         return None
 
 
+class DocumentListSerializer(serializers.ModelSerializer):
+    """Lightweight serializer for the documents list endpoint (dashboard)."""
+    user = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Document
+        fields = ['id', 'user', 'title', 'index_terms', 'template', 'template_style', 'allow_collaborators_to_export', 'created_at', 'updated_at']
+        read_only_fields = ['created_at', 'updated_at']
+
+    def get_user(self, obj):
+        return {'id': obj.user_id}
+
+
 class DocumentSerializer(serializers.ModelSerializer):
     user = UserSerializer(read_only=True)
     collaborators = UserSerializer(many=True, read_only=True)
@@ -204,5 +219,7 @@ class DocumentSerializer(serializers.ModelSerializer):
         return data
 
     def get_sections(self, obj):
-        top_sections = obj.sections.filter(parent=None).order_by('order')
+        all_sections = obj.sections.all()
+        top_sections = [s for s in all_sections if s.parent_id is None]
+        top_sections.sort(key=lambda s: s.order)
         return SectionSerializer(top_sections, many=True, context=self.context).data

@@ -107,6 +107,7 @@ const LatexEqNode = Node.create({
 })
 
 let editors = {};
+window.editors = editors;
 let currentDocId = null;
 let saveTimeout;
 let previewUpdateTimeout;
@@ -579,12 +580,37 @@ async function initApp() {
                 document.getElementById('mandatory-consent-modal').classList.add('active');
             } else {
                 await loadDashboard();
+                // Check if URL has a document path and navigate to it
+                checkUrlForDocument();
             }
         }
     } catch (e) {
         console.error("Failed to load profile:", e);
     }
 }
+
+// SPA Routing: navigate to document from URL path /document/{id}/
+function checkUrlForDocument() {
+    const match = window.location.pathname.match(/^\/document\/(\d+)\/?$/);
+    if (match) {
+        const docId = parseInt(match[1]);
+        document.getElementById('dashboard-view').style.display = 'none';
+        document.getElementById('editor-view').style.display = 'flex';
+        if (typeof toggleHeaderVisibility === 'function') toggleHeaderVisibility(false);
+        loadDocument(docId);
+    }
+}
+
+// Listen for browser back/forward navigation
+window.addEventListener('popstate', () => {
+    if (window.location.pathname === '/' || window.location.pathname === '') {
+        document.getElementById('editor-view').style.display = 'none';
+        document.getElementById('dashboard-view').style.display = 'flex';
+        if (typeof toggleHeaderVisibility === 'function') toggleHeaderVisibility(true);
+    } else {
+        checkUrlForDocument();
+    }
+});
 
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initApp);
@@ -843,7 +869,7 @@ async function loadDocument(id) {
 
         if (nav) nav.innerHTML = '';
         if (content) content.innerHTML = '';
-        editors = {};
+        Object.keys(editors).forEach(k => delete editors[k]);
 
         // Add "Structure" label
         if (nav) {
@@ -942,6 +968,11 @@ async function loadDocument(id) {
                     target.scrollIntoView({ behavior: 'smooth', block: 'start' });
                     document.querySelectorAll('.nav-item, .nav-subitem').forEach(el => el.classList.remove('active'));
                     navItem.classList.add('active');
+                    // Focus the section's editor so lastFocusedEditorId is updated
+                    const sectionEditor = editors[section.id];
+                    if (sectionEditor) {
+                        sectionEditor.commands.focus();
+                    }
                 }
             };
             navGroup.appendChild(navItem);
@@ -1200,6 +1231,15 @@ function handleEditorUpdate(sectionId, content) {
     updateSidebarSubitems(sectionId, content);
     updateSaveStatus('Unsaved changes...', '#f59e0b');
     updateStats();
+
+    if (collabWS.connected) {
+        collabWS.send({
+            type: 'content_update',
+            section_id: sectionId,
+            content: content,
+            section_versions: sectionVersions
+        });
+    }
 
     clearTimeout(saveTimeout);
     saveTimeout = setTimeout(() => {
@@ -3339,6 +3379,8 @@ function showEquationOutput(latex, label) {
     document.getElementById('eq-latex-output').value = latex;
     document.getElementById('eq-label').value = label || 'eq:new';
     document.getElementById('eq-preview-area').style.display = 'block';
+    const errEl = document.getElementById('eq-error-msg');
+    if (errEl) errEl.style.display = 'none';
     
     // Render visual preview in KaTeX
     const renderEl = document.getElementById('eq-math-render');
@@ -3348,6 +3390,16 @@ function showEquationOutput(latex, label) {
         } catch(e) {
             renderEl.textContent = latex;
         }
+    }
+}
+
+function showEquationError(msg) {
+    const errEl = document.getElementById('eq-error-msg');
+    if (errEl) {
+        errEl.textContent = msg;
+        errEl.style.display = 'block';
+    } else {
+        alert(msg);
     }
 }
 
@@ -3373,10 +3425,10 @@ async function processTextToMath() {
         if (data.latex) {
             showEquationOutput(data.latex, 'eq:ai_generated');
         } else {
-            alert('AI Generation failed: ' + (data.error || 'Unknown error'));
+            showEquationError(data.error || 'AI generation failed');
         }
     } catch(e) {
-        alert('Network error: ' + e.message);
+        showEquationError('Network error: ' + e.message);
     } finally {
         genBtn.textContent = origText;
         genBtn.disabled = false;
@@ -3402,10 +3454,10 @@ async function processImageToMath(file) {
         if (data.latex) {
             showEquationOutput(data.latex, 'eq:scanned');
         } else {
-            alert('AI Scanner failed: ' + (data.error || 'Unknown error'));
+            showEquationError('AI Scanner failed: ' + (data.error || 'Unknown error'));
         }
     } catch(e) {
-        alert('Network error: ' + e.message);
+        showEquationError('Network error: ' + e.message);
     } finally {
         zone.innerHTML = origHTML;
     }
@@ -3423,10 +3475,16 @@ function insertEquationIntoDoc() {
     const editor = editors[activeId];
     if (!editor) return;
 
+    // Store the full LaTeX with label inside the node
     const labelStr = label ? `\\label{${label}} ` : '';
-    const formulaBlock = `\n$$${labelStr}\n${latex}\n$$\n`;
+    const fullLatex = labelStr + latex;
+
+    // Insert a latexEq node directly (bypass input rule which can fail with multi-line content)
+    editor.chain().focus().insertContent({
+        type: 'latexEq',
+        attrs: { eqType: 'block', latex: fullLatex }
+    }).run();
     
-    editor.chain().focus().insertContent(formulaBlock).run();
     closeEquationModal();
     updateLatexPreview();
 }
@@ -4221,6 +4279,7 @@ window.loadDashboard = async function() {
                 document.getElementById('dashboard-view').style.display = 'none';
                 document.getElementById('editor-view').style.display = 'flex';
                 if(typeof toggleHeaderVisibility === 'function') toggleHeaderVisibility(false);
+                window.history.pushState({ docId: doc.id }, '', `/document/${doc.id}/`);
                 loadDocument(doc.id);
             };
             
@@ -4271,6 +4330,7 @@ window.createNewDocument = async function() {
             document.getElementById('dashboard-view').style.display = 'none';
             document.getElementById('editor-view').style.display = 'flex';
             if(typeof toggleHeaderVisibility === 'function') toggleHeaderVisibility(false);
+            window.history.pushState({ docId: doc.id }, '', `/document/${doc.id}/`);
             loadDocument(doc.id);
         }
     } catch (e) {
@@ -4569,24 +4629,227 @@ function prepareContentForEditor(content) {
 }
 
 // ============================================================
-// COLLABORATIVE EDITING & PRESENCE LOGIC
+// COLLABORATIVE EDITING & PRESENCE LOGIC (WebSocket + HTTP fallback)
 // ============================================================
 
+const collabWS = {
+    socket: null,
+    connected: false,
+    reconnectAttempts: 0,
+    maxReconnectAttempts: 10,
+    reconnectDelay: 1000,
+    pollInterval: null,
+    lastHeartbeat: 0,
+
+    async connect(docId) {
+        if (this.socket) this.disconnect();
+        try {
+            const wsBase = window.PAPERWRITER_WS_URL || '';
+            let url;
+            if (wsBase) {
+                // External WebSocket server (e.g. Koyeb) — needs token auth (cross-domain)
+                const protocol = wsBase.startsWith('https') ? 'wss:' : 'ws:';
+                const host = wsBase.replace(/^https?:\/\//, '');
+                let token = '';
+                try {
+                    const resp = await fetch('/api/auth/ws-token/', {
+                        method: 'POST',
+                        credentials: 'include',
+                        headers: { 'X-CSRFToken': getCsrfToken() }
+                    });
+                    if (resp.ok) {
+                        const data = await resp.json();
+                        token = data.token || '';
+                    }
+                } catch (e) {
+                    console.warn("WS token fetch failed, trying without auth:", e);
+                }
+                url = `${protocol}//${host}/ws/document/${docId}/` + (token ? `?token=${token}` : '');
+            } else {
+                // Same-origin (local dev or Vercel without WS server)
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                url = `${protocol}//${window.location.host}/ws/document/${docId}/`;
+            }
+            this.socket = new WebSocket(url);
+
+            this.socket.onopen = () => {
+                this.connected = true;
+                this.reconnectAttempts = 0;
+                this.stopPolling();
+                this.startHeartbeatInterval();
+                this.updateConnectionStatus(true);
+            };
+
+            this.socket.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    this.handleMessage(data);
+                } catch (e) {
+                    console.error("WS message parse error:", e);
+                }
+            };
+
+            this.socket.onclose = () => {
+                this.connected = false;
+                this.socket = null;
+                this.updateConnectionStatus(false);
+                this.scheduleReconnect(docId);
+            };
+
+            this.socket.onerror = () => {
+                this.connected = false;
+                this.updateConnectionStatus(false);
+                this.fallbackToPolling();
+            };
+        } catch (e) {
+            console.error("WS connect error:", e);
+            this.fallbackToPolling();
+        }
+    },
+
+    disconnect() {
+        if (this.socket) {
+            this.socket.close();
+            this.socket = null;
+        }
+        this.connected = false;
+        this.stopPolling();
+        this.stopHeartbeatInterval();
+    },
+
+    send(data) {
+        if (this.socket && this.connected && this.socket.readyState === WebSocket.OPEN) {
+            this.socket.send(JSON.stringify(data));
+            return true;
+        }
+        return false;
+    },
+
+    handleMessage(data) {
+        switch (data.type) {
+            case 'connected':
+                break;
+            case 'presence_update':
+                renderCollaboratorAvatars(data.active_users);
+                renderSectionPresence(data.active_users);
+                break;
+            case 'locks_update':
+                updateSectionLocks(data.locks);
+                break;
+            case 'lock_result':
+                this.handleLockResult(data);
+                break;
+            case 'content_update':
+                this.handleContentUpdate(data);
+                break;
+        }
+    },
+
+    handleLockResult(data) {
+        const editor = editors[data.section_id];
+        if (!editor) return;
+        const wrapper = document.getElementById(`section-${data.section_id}`);
+        if (!wrapper) return;
+        if (!data.acquired) {
+            editor.setEditable(false);
+            wrapper.classList.add('locked');
+            let banner = wrapper.querySelector('.section-lock-banner');
+            if (!banner) {
+                banner = document.createElement('div');
+                banner.className = 'section-lock-banner';
+                banner.innerHTML = `
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="display:block; margin-right: 4px;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                    <span>Locked</span>
+                `;
+                wrapper.appendChild(banner);
+            }
+        } else if (data.locked_by_self) {
+            if (wrapper.classList.contains('locked')) {
+                wrapper.classList.remove('locked');
+                const banner = wrapper.querySelector('.section-lock-banner');
+                if (banner) banner.remove();
+                editor.setEditable(true);
+            }
+        }
+    },
+
+    handleContentUpdate(data) {
+        const editor = editors[data.section_id];
+        if (editor && data.content !== undefined) {
+            const currentContent = editor.getHTML();
+            if (currentContent !== data.content) {
+                editor.commands.setContent(prepareContentForEditor(data.content), { emitUpdate: false });
+                sectionVersions[data.section_id] = data.updated_at;
+                updateLatexPreview();
+            }
+        }
+    },
+
+    fallbackToPolling() {
+        this.stopHeartbeatInterval();
+        if (!this.pollInterval) {
+            sendHeartbeat();
+            this.pollInterval = setInterval(sendHeartbeat, 5000);
+        }
+    },
+
+    startHeartbeatInterval() {
+        this.stopHeartbeatInterval();
+        sendHeartbeat();
+        this.pollInterval = setInterval(sendHeartbeat, 5000);
+    },
+
+    stopPolling() {
+        if (this.pollInterval) {
+            clearInterval(this.pollInterval);
+            this.pollInterval = null;
+        }
+    },
+
+    stopHeartbeatInterval() {
+        this.stopPolling();
+    },
+
+    scheduleReconnect(docId) {
+        if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+            this.fallbackToPolling();
+            return;
+        }
+        this.reconnectAttempts++;
+        const delay = Math.min(this.reconnectDelay * Math.pow(1.5, this.reconnectAttempts), 30000);
+        setTimeout(() => {
+            if (!this.connected && currentDocId) {
+                this.connect(docId || currentDocId);
+            }
+        }, delay);
+    },
+
+    updateConnectionStatus(connected) {
+        const indicator = document.getElementById('collab-connection-status');
+        if (indicator) {
+            indicator.style.display = 'flex';
+            indicator.className = `connection-status ${connected ? 'connected' : 'disconnected'}`;
+            indicator.title = connected ? 'Real-time sync active' : 'Connection lost — reconnecting...';
+        }
+    }
+};
+
 function startHeartbeat() {
-    if (heartbeatInterval) clearInterval(heartbeatInterval);
-    sendHeartbeat();
-    heartbeatInterval = setInterval(sendHeartbeat, 5000);
+    if (currentDocId) {
+        collabWS.connect(currentDocId);
+    }
 }
 
 function stopHeartbeat() {
-    if (heartbeatInterval) {
-        clearInterval(heartbeatInterval);
-        heartbeatInterval = null;
-    }
+    collabWS.disconnect();
 }
 
 async function sendHeartbeat() {
     if (!currentDocId) return;
+    if (collabWS.connected) {
+        collabWS.send({ type: 'heartbeat', section_versions: sectionVersions });
+        return;
+    }
     try {
         const res = await fetch(`/api/documents/${currentDocId}/heartbeat/`, {
             method: 'POST',
@@ -4604,7 +4867,6 @@ async function sendHeartbeat() {
         renderCollaboratorAvatars(data.active_users);
         updateSectionLocks(data.locks);
         
-        // Sync editor content from remote changes
         let needsCompile = false;
         if (data.updated_sections && data.updated_sections.length > 0) {
             for (const updated of data.updated_sections) {
@@ -4618,7 +4880,6 @@ async function sendHeartbeat() {
         }
         if (needsCompile) updateLatexPreview();
         
-        // Update all_versions for any sections we might have missed
         if (data.all_versions) {
             for (const [id, ts] of Object.entries(data.all_versions)) {
                 if (sectionVersions[id] === undefined) {
@@ -4651,6 +4912,42 @@ function renderCollaboratorAvatars(users) {
         const colorClass = `collab-avatar-${(idx % 5) + 1}`;
         return `<div class="collab-avatar ${colorClass}" title="${escapeHtml(fullName)} (${escapeHtml(user.email)})">${escapeHtml(initials)}</div>`;
     }).join('');
+}
+
+function renderSectionPresence(activeUsers) {
+    const otherUsers = (activeUsers || []).filter(u => u.email !== userProfile.email);
+    
+    for (const user of otherUsers) {
+        const sectionId = user.current_section;
+        if (!sectionId) continue;
+        const wrapper = document.getElementById(`section-${sectionId}`);
+        if (!wrapper) continue;
+        
+        const existing = wrapper.querySelector(`.section-presence-badge[data-email="${user.email}"]`);
+        if (existing) return;
+        
+        const initials = user.first_name ? user.first_name[0] + (user.last_name ? user.last_name[0] : '') : user.email[0].toUpperCase();
+        const fullName = `${user.first_name} ${user.last_name}`.trim() || user.username;
+        const colorIdx = otherUsers.indexOf(user) % 5;
+        const badge = document.createElement('div');
+        badge.className = `section-presence-badge collab-avatar-${colorIdx + 1}`;
+        badge.setAttribute('data-email', user.email);
+        badge.title = `${fullName} is viewing this section`;
+        badge.textContent = initials;
+        wrapper.appendChild(badge);
+    }
+    
+    for (const [sectionId, editor] of Object.entries(editors)) {
+        const wrapper = document.getElementById(`section-${sectionId}`);
+        if (!wrapper) continue;
+        const badges = wrapper.querySelectorAll('.section-presence-badge');
+        for (const badge of badges) {
+            const email = badge.getAttribute('data-email');
+            if (!otherUsers.some(u => u.email === email && u.current_section === sectionId)) {
+                badge.remove();
+            }
+        }
+    }
 }
 
 function updateSectionLocks(locks) {
@@ -4702,6 +4999,10 @@ function updateSectionLocks(locks) {
 
 async function acquireSectionLock(sectionId) {
     if (!currentDocId) return;
+    if (collabWS.connected) {
+        collabWS.send({ type: 'section_focus', section_id: sectionId });
+        return;
+    }
     try {
         const res = await fetch(`/api/sections/${sectionId}/lock/`, {
             method: 'POST',
@@ -4711,7 +5012,6 @@ async function acquireSectionLock(sectionId) {
             }
         });
         if (res.status === 423) {
-            // Locked by someone else
             const data = await res.json();
             const editor = editors[sectionId];
             if (editor) {
@@ -4732,7 +5032,6 @@ async function acquireSectionLock(sectionId) {
                 }
             }
         } else if (res.ok) {
-            // Successfully locked
             const wrapper = document.getElementById(`section-${sectionId}`);
             if (wrapper && wrapper.classList.contains('locked')) {
                 wrapper.classList.remove('locked');
@@ -4749,6 +5048,10 @@ async function acquireSectionLock(sectionId) {
 
 async function releaseSectionLock(sectionId) {
     if (!currentDocId) return;
+    if (collabWS.connected) {
+        collabWS.send({ type: 'section_blur', section_id: sectionId });
+        return;
+    }
     try {
         await fetch(`/api/sections/${sectionId}/unlock/`, {
             method: 'POST',
@@ -4834,7 +5137,7 @@ async function loadCollaborators() {
 
         const docRes = await fetch(`/api/documents/${currentDocId}/`);
         const doc = await docRes.json();
-        const isOwner = doc.user && userProfile && doc.user.id === userProfile.id;
+        const isOwner = doc.user && userProfile && doc.user.email === userProfile.email;
         
         const exportCheck = document.getElementById('share-allow-export');
         if (exportCheck) {

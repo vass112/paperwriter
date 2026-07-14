@@ -53,3 +53,25 @@ test_export.pdf
 
 .vercel
 rzp-key.csv
+.vercel
+
+# E2E test artifacts
+paperwriter/backend/test-results/
+paperwriter/backend/playwright-report/
+paperwriter/backend/e2e/.auth.json
+
+# Debug/profiling scripts
+paperwriter/backend/cookies.txt
+paperwriter/backend/profile_*.py
+paperwriter/backend/check_*.py
+paperwriter/backend/cleanup_e2e.py
+paperwriter/backend/test_results.txt
+paperwriter/backend/vercel_logs.txt
+
+# Test docs
+PRODUCTION_TEST_PLAN.md
+VALIDATION_TEST_PLAN.md
+
+# Node
+node_modules/
+package-lock.json

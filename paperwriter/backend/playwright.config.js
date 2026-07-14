@@ -3,16 +3,16 @@ const { defineConfig, devices } = require('@playwright/test');
 
 module.exports = defineConfig({
   testDir: './e2e',
-  timeout: 30000,
+  timeout: 60000,
   expect: {
-    timeout: 5000
+    timeout: 10000
   },
-  fullyParallel: true,
+  fullyParallel: false,
   retries: 0,
   workers: 1,
   reporter: 'list',
   use: {
-    baseURL: 'http://127.0.0.1:8000',
+    baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8000',
     trace: 'on-first-retry',
     viewport: { width: 1280, height: 720 },
   },

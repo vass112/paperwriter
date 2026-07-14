@@ -1,0 +1,15 @@
+venv/
+.git/
+.gitignore
+__pycache__/
+*.pyc
+*.sqlite3
+.env
+*.log
+e2e/
+node_modules/
+playwright-report/
+test-results/
+cleanup_e2e.py
+start_server.bat
+vercel_logs.txt

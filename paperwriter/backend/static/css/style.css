@@ -3357,6 +3357,40 @@ body.is-resizing iframe {
     pointer-events: auto;
 }
 
+.connection-status {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    transition: background-color 0.3s ease;
+}
+.connection-status.connected {
+    background-color: #10b981;
+}
+.connection-status.disconnected {
+    background-color: #ef4444;
+}
+
+.section-presence-badge {
+    position: absolute;
+    top: 4px;
+    right: 8px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    font-size: 9px;
+    font-weight: 600;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 4;
+    pointer-events: auto;
+}
+.section-lock-banner + .section-presence-badge {
+    right: 90px;
+}
+
 /* Share Modal list item */
 .share-collab-item {
     display: flex;

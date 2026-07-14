@@ -7,7 +7,7 @@ from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnly, AllowAny
 from rest_framework.throttling import UserRateThrottle, AnonRateThrottle
 from .models import Document, Section, Author, PaperImage, Reference, PaperTable, Comment, DownloadCredit, PaymentTransaction, RedeemCode, RedeemCodeUsage, ContactInquiry, DocumentPresence, SectionLock
-from .serializers import DocumentSerializer, SectionSerializer, AuthorSerializer, PaperImageSerializer, ReferenceSerializer, PaperTableSerializer, CommentSerializer, UserSerializer
+from .serializers import DocumentSerializer, DocumentListSerializer, SectionSerializer, AuthorSerializer, PaperImageSerializer, ReferenceSerializer, PaperTableSerializer, CommentSerializer, UserSerializer
 from django.db import transaction
 import hmac
 import hashlib
@@ -80,7 +80,10 @@ def can_view_document(document, user):
 
 
 def home(request):
-    return render(request, 'index.html', {'google_client_id': settings.GOOGLE_CLIENT_ID})
+    return render(request, 'index.html', {
+        'google_client_id': settings.GOOGLE_CLIENT_ID,
+        'ws_url': getattr(settings, 'WS_SERVER_URL', ''),
+    })
 
 
 @api_view(['POST'])
@@ -104,6 +107,39 @@ def dev_login(request):
 
     login(request, user)
     return Response({"success": True, "message": "Logged in as dev_test_user"})
+
+
+@api_view(['POST'])
+@throttle_classes([UserRateThrottle])
+@permission_classes([AllowAny])
+def dev_login_as(request):
+    """Log in as an arbitrary user for multi-user E2E testing. DEBUG only."""
+    if not settings.DEBUG:
+        return Response({"error": "Only available in debug mode"}, status=status.HTTP_403_FORBIDDEN)
+
+    username = request.data.get('username') or request.data.get('email', '')
+    email = request.data.get('email', '')
+    if not username and not email:
+        return Response({"error": "username or email required"}, status=status.HTTP_400_BAD_REQUEST)
+
+    if not email:
+        email = f'{username}@test.local'
+
+    user, _ = User.objects.get_or_create(
+        username=username,
+        defaults={'email': email, 'first_name': username.replace('_', ' ').title(), 'last_name': ''}
+    )
+    if not user.email:
+        user.email = email
+        user.save()
+
+    if hasattr(user, 'profile'):
+        user.profile.dpdp_consent_processing = True
+        user.profile.dpdp_consent_communication = True
+        user.profile.save()
+
+    login(request, user)
+    return Response({"success": True, "message": f"Logged in as {username}"})
 
 
 @api_view(['POST'])
@@ -176,6 +212,18 @@ def logout_user(request):
     return Response({'success': True})
 
 
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def ws_token(request):
+    """Generate a short-lived token for cross-domain WebSocket authentication.
+    The Koyeb WS server validates this token instead of relying on session cookies.
+    """
+    from django.core.signing import Signer
+    signer = Signer()
+    token = signer.sign(str(request.user.id))
+    return Response({'token': token})
+
+
 @api_view(['GET', 'POST'])
 def user_profile(request):
     if not request.user.is_authenticated:
@@ -220,7 +268,7 @@ class IsOwnerOrReadOnly(IsAuthenticated):
         if request.method in ('GET', 'HEAD', 'OPTIONS'):
             return True
         action = getattr(view, 'action', None)
-        if action in ('heartbeat', 'share', 'unshare', 'collaborators'):
+        if action in ('heartbeat', 'share', 'unshare', 'collaborators', 'add_section', 'add_subsection'):
             return True
         if not hasattr(obj, 'user'):
             return True
@@ -232,15 +280,27 @@ class DocumentViewSet(viewsets.ModelViewSet):
     serializer_class = DocumentSerializer
     permission_classes = [IsAuthenticated, IsOwnerOrReadOnly]
 
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return DocumentListSerializer
+        return DocumentSerializer
+
     def get_queryset(self):
         if self.request.user.is_authenticated:
             from django.db.models import Q
-            return Document.objects.filter(
+            base = Document.objects.filter(
                 Q(user=self.request.user) | 
                 Q(collaborators=self.request.user) |
                 Q(commenters=self.request.user) |
                 Q(viewers=self.request.user)
             ).distinct()
+            if self.action == 'list':
+                return base.select_related('user')
+            return base.select_related('user').prefetch_related(
+                'sections', 'collaborators', 'commenters', 'viewers',
+                'authors', 'references', 'tables', 'comments',
+                'sections__subsections',
+            )
         return Document.objects.none()
 
     def perform_create(self, serializer):
