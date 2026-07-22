@@ -1774,9 +1774,17 @@ test.describe('26. WebSocket Real-Time Collaboration', () => {
 
     const ownerIntro = ownerPage.locator('.nav-item').filter({ hasText: 'Introduction' }).first();
     await ownerIntro.click();
-
     const collabIntro = collabPage.locator('.nav-item').filter({ hasText: 'Introduction' }).first();
     await collabIntro.click();
+
+    await ownerPage.waitForTimeout(2000);
+    await collabPage.waitForTimeout(2000);
+
+    const ownerIndicator = ownerPage.locator('#collab-connection-status');
+    await expect(ownerIndicator).toHaveClass(/connected/, { timeout: 10000 });
+    const collabIndicator = collabPage.locator('#collab-connection-status');
+    await expect(collabIndicator).toHaveClass(/connected/, { timeout: 10000 });
+
     await clearAndTypeInEditor(collabPage, 'Realtime sync test');
     const collabHasText = await collabPage.evaluate(() => {
       const el = document.querySelector('#editor-content .ProseMirror');
@@ -1784,7 +1792,11 @@ test.describe('26. WebSocket Real-Time Collaboration', () => {
     });
     expect(collabHasText).toBe(true);
 
-    await ownerPage.waitForTimeout(3000);
+    await ownerPage.waitForFunction(() => {
+      const el = document.querySelector('#editor-content .ProseMirror');
+      return el && el.textContent.includes('Realtime sync test');
+    }, { timeout: 15000 });
+
     const ownerHasText = await ownerPage.evaluate(() => {
       const el = document.querySelector('#editor-content .ProseMirror');
       return el ? el.textContent.includes('Realtime sync test') : false;
@@ -1841,6 +1853,157 @@ test.describe('26. WebSocket Real-Time Collaboration', () => {
     const ownerIndicator = ownerPage.locator('#collab-connection-status');
     await expect(ownerIndicator).toBeVisible({ timeout: 10000 });
     await expect(ownerIndicator).toHaveClass(/connected/);
+
+    await ownerCtx.close();
+    await collabCtx.close();
+  });
+});
+
+// ============================================================
+// 27. CROSS-DOMAIN WEBSOCKET (TOKEN AUTH PATH)
+// Tests that the token-based auth flow works: frontend fetches
+// a signed token, sends it as ?token= to the WS server.
+// We simulate cross-domain by forcing PAPERWRITER_WS_URL to
+// the same origin, which triggers the token code path instead
+// of the default same-origin session-cookie path.
+// ============================================================
+test.describe('27. Cross-Domain WebSocket Token Auth', () => {
+
+  test('XS-01: WS token endpoint returns valid signed token', async ({ page }) => {
+    await openSampleProject(page);
+    const tokenResult = await page.evaluate(async () => {
+      const csrfToken = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+      const resp = await fetch('/api/auth/ws-token/', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'X-CSRFToken': csrfToken }
+      });
+      if (!resp.ok) return { error: resp.status };
+      const data = await resp.json();
+      return { hasToken: !!data.token, tokenLength: (data.token || '').length };
+    });
+    expect(tokenResult.hasToken).toBe(true);
+    expect(tokenResult.tokenLength).toBeGreaterThan(10);
+  });
+
+  test('XS-02: WS connects via token auth and shows connected', async ({ page }) => {
+    await page.addInitScript(() => {
+      document.addEventListener('DOMContentLoaded', () => {
+        window.PAPERWRITER_WS_URL = window.location.origin;
+      });
+    });
+    await loginAndLoadDashboard(page);
+    await openSampleProject(page);
+    const indicator = page.locator('#collab-connection-status');
+    await expect(indicator).toBeVisible({ timeout: 10000 });
+    await expect(indicator).toHaveClass(/connected/);
+  });
+
+  test('XS-03: Two users see presence via token-auth WS path', async ({ browser }) => {
+    await ensureUserExists(browser, 'xs_p1', 'xs_p1@test.local');
+    const ownerCtx = await browser.newContext();
+    const collabCtx = await browser.newContext();
+    const ownerPage = await ownerCtx.newPage();
+    const collabPage = await collabCtx.newPage();
+
+    await ownerPage.addInitScript(() => {
+      document.addEventListener('DOMContentLoaded', () => {
+        window.PAPERWRITER_WS_URL = window.location.origin;
+      });
+    });
+    await collabPage.addInitScript(() => {
+      document.addEventListener('DOMContentLoaded', () => {
+        window.PAPERWRITER_WS_URL = window.location.origin;
+      });
+    });
+
+    await loginAndLoadDashboard(ownerPage);
+    await openSampleProject(ownerPage);
+    const docTitle = await ownerPage.locator('#doc-title').inputValue();
+
+    await ownerPage.locator('#share-doc-btn').click();
+    await expect(ownerPage.locator('#share-modal')).toBeVisible();
+    await ownerPage.locator('#share-email-input').fill('xs_p1@test.local');
+    await ownerPage.locator('#share-role-input').selectOption('editor');
+    await ownerPage.locator('#share-modal button:has-text("Add")').click();
+    await expect(ownerPage.locator('#share-collabs-list .share-collab-item').filter({ hasText: 'xs_p1@test.local' })).toBeVisible({ timeout: 10000 });
+    await closeCurrentModal(ownerPage);
+
+    await loginAs(collabPage, 'xs_p1', 'xs_p1@test.local');
+    await openDocFromDashboard(collabPage, docTitle);
+    await waitForSectionsLoaded(collabPage);
+
+    const ownerAvatars = ownerPage.locator('#collab-avatars-group');
+    await expect(ownerAvatars).toBeVisible({ timeout: 15000 });
+    await expect(ownerAvatars.locator('.collab-avatar')).toHaveCount(1, { timeout: 10000 });
+
+    const collabAvatars = collabPage.locator('#collab-avatars-group');
+    await expect(collabAvatars).toBeVisible({ timeout: 15000 });
+    await expect(collabAvatars.locator('.collab-avatar')).toHaveCount(1, { timeout: 10000 });
+
+    await ownerCtx.close();
+    await collabCtx.close();
+  });
+
+  test('XS-04: Content syncs via token-auth WS path', async ({ browser }) => {
+    await ensureUserExists(browser, 'xs_s1', 'xs_s1@test.local');
+    const ownerCtx = await browser.newContext();
+    const collabCtx = await browser.newContext();
+    const ownerPage = await ownerCtx.newPage();
+    const collabPage = await collabCtx.newPage();
+
+    await ownerPage.addInitScript(() => {
+      document.addEventListener('DOMContentLoaded', () => {
+        window.PAPERWRITER_WS_URL = window.location.origin;
+      });
+    });
+    await collabPage.addInitScript(() => {
+      document.addEventListener('DOMContentLoaded', () => {
+        window.PAPERWRITER_WS_URL = window.location.origin;
+      });
+    });
+
+    await loginAndLoadDashboard(ownerPage);
+    await openSampleProject(ownerPage);
+    const docTitle = await ownerPage.locator('#doc-title').inputValue();
+
+    await ownerPage.locator('#share-doc-btn').click();
+    await expect(ownerPage.locator('#share-modal')).toBeVisible();
+    await ownerPage.locator('#share-email-input').fill('xs_s1@test.local');
+    await ownerPage.locator('#share-role-input').selectOption('editor');
+    await ownerPage.locator('#share-modal button:has-text("Add")').click();
+    await expect(ownerPage.locator('#share-collabs-list .share-collab-item').filter({ hasText: 'xs_s1@test.local' })).toBeVisible({ timeout: 10000 });
+    await closeCurrentModal(ownerPage);
+
+    await loginAs(collabPage, 'xs_s1', 'xs_s1@test.local');
+    await openDocFromDashboard(collabPage, docTitle);
+    await waitForSectionsLoaded(collabPage);
+
+    const ownerIntro = ownerPage.locator('.nav-item').filter({ hasText: 'Introduction' }).first();
+    await ownerIntro.click();
+    const collabIntro = collabPage.locator('.nav-item').filter({ hasText: 'Introduction' }).first();
+    await collabIntro.click();
+
+    await ownerPage.waitForTimeout(2000);
+    await collabPage.waitForTimeout(2000);
+
+    const ownerIndicator = ownerPage.locator('#collab-connection-status');
+    await expect(ownerIndicator).toHaveClass(/connected/, { timeout: 10000 });
+    const collabIndicator = collabPage.locator('#collab-connection-status');
+    await expect(collabIndicator).toHaveClass(/connected/, { timeout: 10000 });
+
+    await clearAndTypeInEditor(collabPage, 'Token auth content sync');
+
+    await ownerPage.waitForFunction(() => {
+      const el = document.querySelector('#editor-content .ProseMirror');
+      return el && el.textContent.includes('Token auth content sync');
+    }, { timeout: 15000 });
+
+    const ownerHasText = await ownerPage.evaluate(() => {
+      const el = document.querySelector('#editor-content .ProseMirror');
+      return el ? el.textContent.includes('Token auth content sync') : false;
+    });
+    expect(ownerHasText).toBe(true);
 
     await ownerCtx.close();
     await collabCtx.close();

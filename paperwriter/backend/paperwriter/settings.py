@@ -302,5 +302,6 @@ else:
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', CONTACT_EMAIL)
 FRONTEND_URL = os.getenv('FRONTEND_URL', 'https://paperwriter.app')
 
-# WebSocket server URL — set on Koyeb so the frontend knows where to connect
-WS_SERVER_URL = os.getenv('WS_SERVER_URL', '')  # e.g. 'wss://your-app.koyeb.app'
+# WebSocket server URL — Railway-hosted Daphne for real-time collaboration
+# In DEBUG (local dev), use same-origin WebSocket; in production, use Railway
+WS_SERVER_URL = os.getenv('WS_SERVER_URL', '' if DEBUG else 'wss://ws-server-production-c09a.up.railway.app')

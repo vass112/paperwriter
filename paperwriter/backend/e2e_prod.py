@@ -81,7 +81,8 @@ def test_cdn_resources():
 
 def test_404():
     r = requests.get(f"{BASE}/nonexistent_page_xyz", timeout=15)
-    check("404 for unknown path", r.status_code == 404, f"Got {r.status_code}")
+    # SPA catch-all now returns 200 (index.html) for unknown paths
+    check("SPA catch-all for unknown path", r.status_code == 200, f"Got {r.status_code}")
 
 def test_favicon():
     r = requests.get(f"{BASE}/favicon.ico", timeout=15)
