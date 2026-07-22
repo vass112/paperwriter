@@ -7,7 +7,7 @@ from django.conf.urls.static import static
 from django.views.static import serve as static_serve
 
 # SPA catch-all: serve index.html for any path not matched above
-spa_view = TemplateView.as_view(template_name='index.html', extra_context={'google_client_id': settings.GOOGLE_CLIENT_ID, 'debug': settings.DEBUG})
+spa_view = TemplateView.as_view(template_name='index.html', extra_context={'google_client_id': settings.GOOGLE_CLIENT_ID, 'debug': settings.DEBUG, 'ws_url': getattr(settings, 'WS_SERVER_URL', '')})
 
 urlpatterns = [
     path('admin/', admin.site.urls),

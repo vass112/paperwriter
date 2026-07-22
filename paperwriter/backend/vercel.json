@@ -16,7 +16,6 @@
     }
   ],
   "env": {
-    "DJANGO_SETTINGS_MODULE": "paperwriter.settings",
-    "WS_SERVER_URL": "wss://ws-server-production-c09a.up.railway.app"
+    "DJANGO_SETTINGS_MODULE": "paperwriter.settings"
   }
 }

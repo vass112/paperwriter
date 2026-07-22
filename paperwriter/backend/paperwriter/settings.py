@@ -304,4 +304,7 @@ FRONTEND_URL = os.getenv('FRONTEND_URL', 'https://paperwriter.app')
 
 # WebSocket server URL — Railway-hosted Daphne for real-time collaboration
 # In DEBUG (local dev), use same-origin WebSocket; in production, use Railway
-WS_SERVER_URL = os.getenv('WS_SERVER_URL', '' if DEBUG else 'wss://ws-server-production-c09a.up.railway.app')
+if DEBUG:
+    WS_SERVER_URL = ''
+else:
+    WS_SERVER_URL = 'wss://ws-server-production-c09a.up.railway.app'
