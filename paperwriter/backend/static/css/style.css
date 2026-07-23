@@ -3358,16 +3358,35 @@ body.is-resizing iframe {
 }
 
 .connection-status {
-    width: 8px;
-    height: 8px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    font-weight: 500;
+    padding: 3px 8px;
+    border-radius: 12px;
+    flex-shrink: 0;
+    transition: all 0.3s ease;
+}
+.connection-status::before {
+    content: '';
+    width: 7px;
+    height: 7px;
     border-radius: 50%;
     flex-shrink: 0;
-    transition: background-color 0.3s ease;
 }
 .connection-status.connected {
+    color: #059669;
+    background: #ecfdf5;
+}
+.connection-status.connected::before {
     background-color: #10b981;
 }
 .connection-status.disconnected {
+    color: #dc2626;
+    background: #fef2f2;
+}
+.connection-status.disconnected::before {
     background-color: #ef4444;
 }
 

@@ -4647,9 +4647,8 @@ const collabWS = {
             const wsBase = window.PAPERWRITER_WS_URL || '';
             let url;
             if (wsBase) {
-                // External WebSocket server (e.g. Koyeb) — needs token auth (cross-domain)
-                const protocol = wsBase.startsWith('https') ? 'wss:' : 'ws:';
-                const host = wsBase.replace(/^https?:\/\//, '');
+                // External WebSocket server — needs token auth (cross-domain)
+                const base = wsBase.replace(/\/+$/, '');
                 let token = '';
                 try {
                     const resp = await fetch('/api/auth/ws-token/', {
@@ -4664,7 +4663,7 @@ const collabWS = {
                 } catch (e) {
                     console.warn("WS token fetch failed, trying without auth:", e);
                 }
-                url = `${protocol}//${host}/ws/document/${docId}/` + (token ? `?token=${token}` : '');
+                url = `${base}/ws/document/${docId}/` + (token ? `?token=${token}` : '');
             } else {
                 // Same-origin (local dev or Vercel without WS server)
                 const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -4829,6 +4828,7 @@ const collabWS = {
         if (indicator) {
             indicator.style.display = 'flex';
             indicator.className = `connection-status ${connected ? 'connected' : 'disconnected'}`;
+            indicator.textContent = connected ? 'Live' : 'Reconnecting...';
             indicator.title = connected ? 'Real-time sync active' : 'Connection lost — reconnecting...';
         }
     }
