@@ -54,7 +54,7 @@ class DocumentConsumer(AsyncWebsocketConsumer):
 
     async def _try_token_auth(self):
         """Validate a short-lived token from query string for cross-domain WS auth."""
-        from django.core.signing import Signer, BadSignature
+        from django.core.signing import TimestampSigner, BadSignature, SignatureExpired
         from channels.db import database_sync_to_async
 
         query_string = self.scope.get('query_string', b'').decode()
@@ -63,19 +63,24 @@ class DocumentConsumer(AsyncWebsocketConsumer):
         if not token:
             return
 
-        signer = Signer()
+        signer = TimestampSigner()
         try:
-            user_id = signer.unsign(token)
+            user_id = signer.unsign(token, max_age=300)  # 5 minute expiry
             user = await database_sync_to_async(
                 lambda: __import__('django.contrib.auth.models', fromlist=['User']).User.objects.get(id=int(user_id))
             )()
             if user.is_active:
                 self.user = user
-        except (BadSignature, Exception):
+        except (BadSignature, SignatureExpired):
+            pass
+        except Exception:
             pass
 
     async def receive(self, text_data):
-        data = json.loads(text_data)
+        try:
+            data = json.loads(text_data)
+        except json.JSONDecodeError:
+            return
         msg_type = data.get('type', '')
 
         if msg_type == 'section_focus':
@@ -116,21 +121,51 @@ class DocumentConsumer(AsyncWebsocketConsumer):
         section_id = data.get('section_id')
         content = data.get('content')
 
-        if section_id and content is not None:
-            await self.channel_layer.group_send(
-                self.document_group_name,
-                {
-                    'type': 'content_broadcast',
-                    'section_id': section_id,
-                    'content': content,
-                    'sender_email': self.user.email,
-                }
-            )
+        if not section_id or content is None:
+            return
+
+        # Validate section belongs to this document and user has edit access
+        is_valid = await database_sync_to_async(self._validate_section_update)(section_id)
+        if not is_valid:
+            return
+
+        # Sanitize content
+        import re
+        content = re.sub(r'<script[^>]*>.*?</script>', '', content, flags=re.IGNORECASE | re.DOTALL)
+        content = re.sub(r'\bon\w+\s*=\s*\S+', '', content, flags=re.IGNORECASE)
+
+        # Limit content size
+        if len(content) > 100000:
+            return
+
+        await self.channel_layer.group_send(
+            self.document_group_name,
+            {
+                'type': 'content_broadcast',
+                'section_id': section_id,
+                'content': content,
+                'sender_email': self.user.email,
+            }
+        )
 
     async def _handle_heartbeat(self, data):
         await database_sync_to_async(self._update_presence)()
         await self._broadcast_presence()
         await self._broadcast_locks()
+
+    def _validate_section_update(self, section_id):
+        from .models import Section, Document
+        try:
+            section = Section.objects.select_related('document').get(id=section_id)
+        except Section.DoesNotExist:
+            return False
+        if section.document_id != int(self.document_id):
+            return False
+        doc = section.document
+        return (
+            doc.user == self.user
+            or doc.collaborators.filter(id=self.user.id).exists()
+        )
 
     async def content_broadcast(self, event):
         if event.get('sender_email') == self.user.email:
@@ -169,11 +204,9 @@ class DocumentConsumer(AsyncWebsocketConsumer):
     def _add_presence(self):
         from .models import DocumentPresence
         doc_id = int(self.document_id)
-        presence, _ = DocumentPresence.objects.get_or_create(
+        DocumentPresence.objects.get_or_create(
             document_id=doc_id, user=self.user
         )
-        presence.last_active = timezone.now()
-        presence.save()
 
     def _remove_presence(self):
         from .models import DocumentPresence
@@ -186,18 +219,19 @@ class DocumentConsumer(AsyncWebsocketConsumer):
         presence, _ = DocumentPresence.objects.get_or_create(
             document_id=doc_id, user=self.user
         )
-        presence.last_active = timezone.now()
-        presence.save()
+        presence.save()  # auto_now updates last_active
 
     def _acquire_lock(self, section_id):
-        from .models import SectionLock
-        from .serializers import UserSerializer
+        from .models import SectionLock, Section
+
+        # Verify section belongs to this document
+        if not Section.objects.filter(id=section_id, document_id=int(self.document_id)).exists():
+            return {'acquired': False}
 
         lock = SectionLock.objects.filter(section_id=section_id).first()
         if lock:
             if lock.user == self.user:
-                lock.locked_at = timezone.now()
-                lock.save()
+                lock.save()  # auto_now updates locked_at
                 return {'acquired': True, 'locked_by_self': True}
             if lock.locked_at < timezone.now() - timedelta(seconds=20):
                 lock.delete()

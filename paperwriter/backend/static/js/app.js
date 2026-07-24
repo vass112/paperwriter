@@ -109,9 +109,11 @@ const LatexEqNode = Node.create({
 let editors = {};
 window.editors = editors;
 let currentDocId = null;
-let saveTimeout;
+let saveTimeouts = {};
 let previewUpdateTimeout;
 let sectionVersions = {};
+let pendingSaves = {};
+let periodicSaveInterval = null;
 
 // Tables state
 let tablesList = [];
@@ -869,6 +871,11 @@ async function loadDocument(id) {
 
         if (nav) nav.innerHTML = '';
         if (content) content.innerHTML = '';
+        Object.keys(editors).forEach(k => {
+            if (editors[k] && typeof editors[k].destroy === 'function') {
+                editors[k].destroy();
+            }
+        });
         Object.keys(editors).forEach(k => delete editors[k]);
 
         // Add "Structure" label
@@ -1241,10 +1248,25 @@ function handleEditorUpdate(sectionId, content) {
         });
     }
 
-    clearTimeout(saveTimeout);
-    saveTimeout = setTimeout(() => {
+    pendingSaves[sectionId] = content;
+
+    if (saveTimeouts[sectionId]) clearTimeout(saveTimeouts[sectionId]);
+    saveTimeouts[sectionId] = setTimeout(() => {
+        delete saveTimeouts[sectionId];
+        delete pendingSaves[sectionId];
         saveSection(sectionId, content);
     }, 1000);
+
+    if (!periodicSaveInterval) {
+        periodicSaveInterval = setInterval(() => {
+            for (const [sid, content] of Object.entries(pendingSaves)) {
+                if (!saveTimeouts[sid]) {
+                    delete pendingSaves[sid];
+                    saveSection(sid, content);
+                }
+            }
+        }, 5000);
+    }
 }
 
 // ============================================================

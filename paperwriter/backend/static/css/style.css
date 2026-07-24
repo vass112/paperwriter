@@ -1457,6 +1457,8 @@ body.is-resizing iframe {
     transition: all 0.2s;
     background: var(--bg-surface);
     color: var(--brand-900);
+    min-height: 180px;
+    resize: vertical;
 }
 
 .modal-select {
@@ -1492,10 +1494,7 @@ body.is-resizing iframe {
     font-size: 13px;
 }
 
-.modal-textarea {
-    min-height: 180px;
-    resize: vertical;
-}
+
 
 .modal-form-grid {
     display: grid;
@@ -2245,111 +2244,6 @@ body.is-resizing iframe {
 .card-delete-btn:hover {
     color: #ef4444 !important;
     background: rgba(239, 68, 68, 0.08);
-}
-
-/* ===== LOGIN PAGE ===== */
-.login-wrapper {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 100vh;
-    background: radial-gradient(circle at center, #0f172a 0%, #020617 100%);
-    position: relative;
-    overflow: hidden;
-    font-family: 'Inter', sans-serif;
-    color: #f8fafc;
-}
-
-.login-bg-glow {
-    position: absolute;
-    width: 600px;
-    height: 600px;
-    background: radial-gradient(circle, rgba(99, 102, 241, 0.15) 0%, rgba(99, 102, 241, 0) 70%);
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    z-index: 1;
-    pointer-events: none;
-}
-
-.login-card {
-    background: rgba(15, 23, 42, 0.65);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 24px;
-    width: 100%;
-    max-width: 420px;
-    padding: 40px;
-    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
-    z-index: 2;
-    text-align: center;
-    box-sizing: border-box;
-    animation: loginFadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-@keyframes loginFadeIn {
-    from { opacity: 0; transform: translateY(20px); }
-    to { opacity: 1; transform: translateY(0); }
-}
-
-.login-logo {
-    width: 64px;
-    height: 64px;
-    background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
-    color: white;
-    font-size: 32px;
-    font-weight: 800;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 18px;
-    margin: 0 auto 20px auto;
-    box-shadow: 0 8px 16px rgba(99, 102, 241, 0.3);
-}
-
-.login-header h2 {
-    font-size: 28px;
-    font-weight: 700;
-    margin: 0 0 4px 0;
-    letter-spacing: -0.025em;
-    background: linear-gradient(to right, #f8fafc, #cbd5e1);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-}
-
-.login-header p {
-    font-size: 14px;
-    color: #6366f1;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    margin: 0 0 28px 0;
-}
-
-.login-instructions {
-    font-size: 14px;
-    line-height: 20px;
-    color: #94a3b8;
-    margin-bottom: 32px;
-}
-
-.google-btn-container {
-    display: flex;
-    justify-content: center;
-    margin-bottom: 32px;
-}
-
-.login-footer {
-    border-top: 1px solid rgba(255, 255, 255, 0.06);
-    padding-top: 24px;
-}
-
-.login-footer p {
-    font-size: 11px;
-    line-height: 16px;
-    color: #64748b;
-    margin: 0;
 }
 
 /* ============================================================
@@ -3573,4 +3467,35 @@ body.is-resizing iframe {
 .mq-field .mq-editable-field.mq-focused {
     box-shadow: 0 0 0 2px rgba(15, 23, 42, 0.15);
     border-color: var(--brand-900);
+}
+
+/* Focus visible for keyboard navigation */
+:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+/* Remove default focus ring for mouse users */
+:focus:not(:focus-visible) {
+    outline: none;
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
 }

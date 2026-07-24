@@ -53,6 +53,18 @@ class PaperTableSerializer(serializers.ModelSerializer):
             'content': {'max_length': 50000},
         }
 
+    def validate_content(self, value):
+        import json
+        try:
+            parsed = json.loads(value)
+            if not isinstance(parsed, list):
+                raise serializers.ValidationError("Content must be a JSON array")
+        except json.JSONDecodeError:
+            raise serializers.ValidationError("Content must be valid JSON")
+        if len(value) > 50000:
+            raise serializers.ValidationError("Content too long")
+        return value
+
 
 class CommentSerializer(serializers.ModelSerializer):
     class Meta:
@@ -87,10 +99,8 @@ class SectionSerializer(serializers.ModelSerializer):
         if value and len(value) > 100000:
             raise serializers.ValidationError("Content too long")
         if value:
-            cleaned = re.sub(r'<script[^>]*>.*?</script>', '', value, flags=re.IGNORECASE | re.DOTALL)
-            cleaned = re.sub(r'\bon\w+\s*=\s*["\'][^"\']*["\']', '', cleaned, flags=re.IGNORECASE)
-            cleaned = re.sub(r'javascript\s*:', '', cleaned, flags=re.IGNORECASE)
-            return cleaned
+            from .views import sanitize_html
+            return sanitize_html(value)
         return value
 
 
@@ -114,7 +124,7 @@ class AuthorSerializer(serializers.ModelSerializer):
 
 
 ALLOWED_IMAGE_TYPES = {'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml'}
-MAX_IMAGE_SIZE = 10 * 1024 * 1024
+MAX_IMAGE_SIZE = 4 * 1024 * 1024
 
 
 class PaperImageSerializer(serializers.ModelSerializer):
@@ -152,6 +162,9 @@ class PaperImageSerializer(serializers.ModelSerializer):
         image_file = validated_data.pop('image', None)
         instance = super().create(validated_data)
         if image_file:
+            if image_file.size > MAX_IMAGE_SIZE:
+                instance.delete()
+                raise serializers.ValidationError(f"Image too large. Maximum size is {MAX_IMAGE_SIZE // (1024*1024)}MB")
             name = image_file.name
             name = re.sub(r'[^a-zA-Z0-9_.-]', '_', name)
             name = re.sub(r'_+', '_', name)

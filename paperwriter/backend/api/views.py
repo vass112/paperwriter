@@ -25,7 +25,7 @@ import html as html_module
 
 # === CONSTANTS ===
 ALLOWED_IMAGE_TYPES = {'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml'}
-MAX_IMAGE_SIZE = 4 * 1024 * 1024  # 4MB (Vercel serverless body limit is 4.5MB)
+MAX_IMAGE_SIZE = 10 * 1024 * 1024  # 10MB
 MAX_SECTION_CONTENT_LENGTH = 100000  # ~100KB
 MAX_BIBTEX_LENGTH = 50000
 ALLOWED_LATEX_COMMANDS = set()
@@ -145,7 +145,6 @@ def dev_login_as(request):
 @api_view(['POST'])
 @throttle_classes([AnonRateThrottle, UserRateThrottle])
 @permission_classes([AllowAny])
-@csrf_exempt
 def google_auth(request):
     import json as _json
     token = None
@@ -164,14 +163,7 @@ def google_auth(request):
             body = {}
 
     if not token:
-        return Response({
-            'error': 'Token is required',
-            'diagnostic': {
-                'drf_data_keys': list(request.data.keys()) if request.data else None,
-                'body_length': len(request.body) if request.body else 0,
-                'content_type': request.content_type,
-            }
-        }, status=400)
+        return Response({'error': 'Token is required'}, status=400)
 
     if not settings.GOOGLE_CLIENT_ID:
         return Response({'error': 'Google Client ID not configured'}, status=500)
@@ -201,9 +193,9 @@ def google_auth(request):
 
         return Response({'success': True, 'dpdp_consent': consent, 'created': created})
     except ValueError as e:
-        return Response({'error': f'Token verification failed: {str(e)}'}, status=400)
+        return Response({'error': 'Authentication failed'}, status=400)
     except Exception as e:
-        return Response({'error': f'Authentication failed: {type(e).__name__}: {str(e)}'}, status=400)
+        return Response({'error': 'Authentication failed'}, status=400)
 
 
 @api_view(['POST'])
@@ -218,8 +210,8 @@ def ws_token(request):
     """Generate a short-lived token for cross-domain WebSocket authentication.
     The Koyeb WS server validates this token instead of relying on session cookies.
     """
-    from django.core.signing import Signer
-    signer = Signer()
+    from django.core.signing import TimestampSigner
+    signer = TimestampSigner()
     token = signer.sign(str(request.user.id))
     return Response({'token': token})
 
@@ -255,6 +247,9 @@ def user_profile(request):
 def delete_account(request):
     if not request.user.is_authenticated:
         return Response({'error': 'Not authenticated'}, status=401)
+    confirm = request.data.get('confirm', '')
+    if confirm != 'DELETE':
+        return Response({'error': 'Please type DELETE to confirm'}, status=400)
     user = request.user
     logout(request)
     user.delete()
@@ -268,7 +263,7 @@ class IsOwnerOrReadOnly(IsAuthenticated):
         if request.method in ('GET', 'HEAD', 'OPTIONS'):
             return True
         action = getattr(view, 'action', None)
-        if action in ('heartbeat', 'share', 'unshare', 'collaborators', 'add_section', 'add_subsection'):
+        if action in ('heartbeat', 'share', 'unshare', 'collaborators'):
             return True
         if not hasattr(obj, 'user'):
             return True
@@ -330,7 +325,10 @@ class DocumentViewSet(viewsets.ModelViewSet):
         document = self.get_object()
         title = request.data.get('title')
         parent_id = request.data.get('parent')
+        VALID_SECTION_TYPES = {'abstract', 'intro', 'related_work', 'methodology', 'results', 'conclusion', 'references', 'discussion', 'acknowledgments', 'custom'}
         section_type = request.data.get('section_type', 'custom')
+        if section_type not in VALID_SECTION_TYPES:
+            section_type = 'custom'
 
         if not title:
             return Response({'error': 'Title is required'}, status=status.HTTP_400_BAD_REQUEST)
@@ -358,7 +356,7 @@ class DocumentViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def share(self, request, pk=None):
-        document = self.get_object()
+        document = Document.objects.select_related('user').only('id', 'user_id').get(pk=pk)
         if document.user != request.user:
             return Response({'error': 'Only the document owner can share it.'}, status=status.HTTP_403_FORBIDDEN)
         
@@ -406,7 +404,7 @@ class DocumentViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def unshare(self, request, pk=None):
-        document = self.get_object()
+        document = Document.objects.select_related('user').only('id', 'user_id').get(pk=pk)
         if document.user != request.user:
             return Response({'error': 'Only the document owner can manage collaborators.'}, status=status.HTTP_403_FORBIDDEN)
             
@@ -426,7 +424,9 @@ class DocumentViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['get'])
     def collaborators(self, request, pk=None):
-        document = self.get_object()
+        document = Document.objects.select_related('user').prefetch_related(
+            'collaborators', 'commenters', 'viewers'
+        ).get(pk=pk)
         collabs = []
         for user in document.collaborators.all():
             data = UserSerializer(user).data
@@ -444,11 +444,17 @@ class DocumentViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def heartbeat(self, request, pk=None):
-        document = self.get_object()
+        document = Document.objects.get(pk=pk)
         user = request.user
         
         from django.utils import timezone
         from datetime import timedelta
+        from django.core.cache import cache
+        
+        cache_key = f'heartbeat_{user.id}_{document.id}'
+        if cache.get(cache_key):
+            return Response({'success': True})
+        cache.set(cache_key, True, 5)
         
         presence, created = DocumentPresence.objects.get_or_create(document=document, user=user)
         presence.last_active = timezone.now()
@@ -517,10 +523,21 @@ class DocumentViewSet(viewsets.ModelViewSet):
         })
 
 
+class IsSectionEditor(IsAuthenticated):
+    def has_object_permission(self, request, view, obj):
+        if request.method in ('GET', 'HEAD', 'OPTIONS'):
+            return True
+        action = getattr(view, 'action', None)
+        if action in ('lock', 'unlock'):
+            return True
+        doc = obj.document
+        return doc.user == request.user or doc.collaborators.filter(id=request.user.id).exists()
+
+
 class SectionViewSet(viewsets.ModelViewSet):
     queryset = Section.objects.all()
     serializer_class = SectionSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsSectionEditor]
 
     def get_queryset(self):
         from django.db.models import Q
@@ -540,7 +557,8 @@ class SectionViewSet(viewsets.ModelViewSet):
         content = serializer.validated_data.get('content')
         if content:
             if len(content) > MAX_SECTION_CONTENT_LENGTH:
-                raise ValueError("Content too long")
+                from rest_framework.exceptions import ValidationError
+                raise ValidationError("Content too long (max 100,000 characters)")
             serializer.validated_data['content'] = sanitize_html(content)
         serializer.save()
 
@@ -551,6 +569,10 @@ class SectionViewSet(viewsets.ModelViewSet):
         from .models import SectionLock
         from django.utils import timezone
         from datetime import timedelta
+        
+        doc = section.document
+        if doc.user != user and not doc.collaborators.filter(id=user.id).exists():
+            return Response({'error': 'Only owners and collaborators can lock sections'}, status=status.HTTP_403_FORBIDDEN)
         
         lock = SectionLock.objects.filter(section=section).first()
         if lock:
@@ -585,6 +607,10 @@ class SectionViewSet(viewsets.ModelViewSet):
     def move(self, request, pk=None):
         section = self.get_object()
         direction = request.data.get('direction')
+        
+        doc = section.document
+        if doc.user != request.user and not doc.collaborators.filter(id=request.user.id).exists():
+            return Response({'error': 'Only owners and collaborators can reorder sections'}, status=status.HTTP_403_FORBIDDEN)
 
         siblings = list(Section.objects.filter(document=section.document, parent=section.parent).order_by('order'))
         for idx, s in enumerate(siblings):
@@ -624,7 +650,7 @@ class AuthorViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         doc = serializer.validated_data.get('document')
         if doc.user != self.request.user and not doc.collaborators.filter(id=self.request.user.id).exists():
-            raise PermissionError("Cannot add authors to this document")
+            return Response({'error': 'Cannot add authors to this document'}, status=status.HTTP_403_FORBIDDEN)
         serializer.save()
 
     def create(self, request, *args, **kwargs):
@@ -658,7 +684,7 @@ class PaperImageViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         doc = serializer.validated_data.get('document')
         if doc.user != self.request.user and not doc.collaborators.filter(id=self.request.user.id).exists():
-            raise PermissionError("Cannot add images to this document")
+            return Response({'error': 'Cannot add images to this document'}, status=status.HTTP_403_FORBIDDEN)
 
         # Server-side file validation
         image_file = self.request.FILES.get('image')
@@ -708,7 +734,7 @@ class ReferenceViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         doc = serializer.validated_data.get('document')
         if doc.user != self.request.user and not doc.collaborators.filter(id=self.request.user.id).exists():
-            raise PermissionError("Cannot add references to this document")
+            return Response({'error': 'Cannot add references to this document'}, status=status.HTTP_403_FORBIDDEN)
         bibtex = serializer.validated_data.get('bibtex', '')
         if len(bibtex) > MAX_BIBTEX_LENGTH:
             raise ValueError("BibTeX content too long")
@@ -985,6 +1011,7 @@ def _compile_pdf_to_bytes(latex_source, document):
         return None, {'error': 'Compilation timeout'}, 500
 
 @api_view(['GET'])
+@throttle_classes([UserRateThrottle])
 def export_pdf(request, doc_id):
     """Compile LaTeX to PDF and return it"""
     try:
@@ -1027,6 +1054,7 @@ def export_pdf(request, doc_id):
 
 
 @api_view(['GET'])
+@throttle_classes([UserRateThrottle])
 def preview_pdf(request, doc_id):
     """Compile LaTeX to PDF and return it for live preview without deducting credits"""
     try:
@@ -1050,6 +1078,7 @@ def preview_pdf(request, doc_id):
         return Response({'error': 'Document not found'}, status=404)
 
 @api_view(['GET'])
+@throttle_classes([UserRateThrottle])
 def export_latex(request, doc_id):
     """Export LaTeX project as ZIP"""
     try:
@@ -1116,7 +1145,7 @@ def export_latex(request, doc_id):
                 credit = DownloadCredit.objects.select_for_update().get(user=paying_user)
                 credit.remaining += 1
                 credit.save()
-        return Response({'error': str(e)}, status=500)
+        return Response({'error': 'LaTeX compilation failed. Please try again.'}, status=500)
 
 
 class PaperTableViewSet(viewsets.ModelViewSet):
@@ -1141,7 +1170,7 @@ class PaperTableViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         doc = serializer.validated_data.get('document')
         if doc.user != self.request.user and not doc.collaborators.filter(id=self.request.user.id).exists():
-            raise PermissionError("Cannot add tables to this document")
+            return Response({'error': 'Cannot add tables to this document'}, status=status.HTTP_403_FORBIDDEN)
         serializer.save()
 
 
@@ -1167,11 +1196,12 @@ class CommentViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         doc = serializer.validated_data.get('document')
         if doc.user != self.request.user and not doc.collaborators.filter(id=self.request.user.id).exists() and not doc.commenters.filter(id=self.request.user.id).exists():
-            raise PermissionError("Cannot add comments to this document")
+            return Response({'error': 'Cannot add comments to this document'}, status=status.HTTP_403_FORBIDDEN)
         text = serializer.validated_data.get('text', '')
         if len(text) > 5000:
             raise ValueError("Comment too long (max 5000 chars)")
-        serializer.save(author_name=self.request.user.username)
+        author_display = self.request.user.get_full_name() or self.request.user.username
+        serializer.save(author_name=author_display)
 
 
 @api_view(['POST'])
@@ -1188,6 +1218,9 @@ def process_ai_equation(request):
 
     if description and len(description) > 1000:
         return Response({'error': 'Description too long'}, status=400)
+
+    if description:
+        description = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', description)
 
     try:
         api_key = settings.GEMINI_API_KEY
@@ -1313,7 +1346,9 @@ def buy_credits(request):
     if not (page_id.startswith('pl/') or page_id.startswith('rzp/')):
         page_id = f"pl/{page_id}"
         
-    redirect_url = f"https://rzp.io/{page_id}?callback_url={callback_url}&user_email={user_email}"
+    import base64 as _b64
+    encoded_email = _b64.urlsafe_b64encode(user_email.encode()).decode()
+    redirect_url = f"https://rzp.io/{page_id}?callback_url={callback_url}&user_email={encoded_email}"
     return redirect(redirect_url)
 
 @api_view(['GET'])
@@ -1323,6 +1358,12 @@ def payment_callback(request):
     order_id = request.GET.get('razorpay_order_id', '')
     signature = request.GET.get('razorpay_signature', '')
     user_email = request.GET.get('user_email', '')
+    
+    try:
+        import base64 as _b64
+        user_email = _b64.urlsafe_b64decode(user_email.encode()).decode()
+    except Exception:
+        pass
 
     if not payment_id or not signature:
         return redirect('/?payment=failed')
@@ -1366,7 +1407,8 @@ def payment_callback(request):
     except Exception as e:
         print(f"Failed to fetch Razorpay payment details: {e}")
 
-    user = User.objects.filter(email=user_email).first()
+    user_email_from_rzp = payment_data.get('email', '') if 'payment_data' in locals() else ''
+    user = User.objects.filter(email=user_email_from_rzp).first() if user_email_from_rzp else User.objects.filter(email=user_email).first()
     if not user:
         # Create record for unknown user
         PaymentTransaction.objects.create(
@@ -1443,19 +1485,27 @@ def redeem_code(request):
     except RedeemCode.DoesNotExist:
         return Response({'error': 'Invalid code'}, status=404)
     except Exception as e:
-        return Response({'error': str(e)}, status=500)
+        return Response({'error': 'Failed to redeem code. Please try again.'}, status=400)
 
 @api_view(['POST'])
 @throttle_classes([AnonRateThrottle, UserRateThrottle])
 @permission_classes([AllowAny])
 def contact_inquiry(request):
-    name = request.data.get('name')
-    email = request.data.get('email')
-    institution = request.data.get('institution')
-    message = request.data.get('message')
+    import re as _re
+    name = request.data.get('name', '').strip()
+    email = request.data.get('email', '').strip()
+    institution = request.data.get('institution', '').strip()
+    message = request.data.get('message', '').strip()
     
     if not all([name, email, institution, message]):
         return Response({'error': 'All fields are required'}, status=400)
+    if len(name) > 200 or len(email) > 200 or len(institution) > 200 or len(message) > 5000:
+        return Response({'error': 'Input too long'}, status=400)
+    
+    name = _re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', name)
+    email = _re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', email)
+    institution = _re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', institution)
+    message = _re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', message)
         
     ContactInquiry.objects.create(
         name=name, email=email, institution=institution, message=message
